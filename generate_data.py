@@ -2,6 +2,7 @@ import numpy as np
 import skimage
 import scipy
 import scipy.stats
+import scipy.misc
 import sklearn
 import sklearn.preprocessing
 import matplotlib.pyplot as plt
@@ -68,20 +69,28 @@ def generatePillImage():
     width = 256
     height = 256
 
+    splotchPatternWidth = 384
+    splotchPatternHeight = 384
+
     # np.random.seed()
-    splotchMaskPattern = generate_perlin_noise_2d((width, height), (8, 8))
-    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.4, copy=False)
+    splotchMaskPattern = generate_perlin_noise_2d((splotchPatternWidth, splotchPatternHeight), (16, 16))
+    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.45, copy=False)
     splotchMask = np.zeros((width, height, 1))
-    splotchMask[:, :, 0] = splotchMaskPattern
+    splotchMask[:, :, 0] = splotchMaskPattern[:width, :height]
+    splotchMask = scipy.ndimage.filters.gaussian_filter(splotchMask, 0.6, order=0)
 
     backgroundTexture = np.zeros((width, height, 3))
     backgroundPattern = np.zeros((width, height, 1))
     backgroundPattern[:,:,0] = generate_perlin_noise_2d((width, height), (16, 16))
     backgroundColor1 = np.zeros((width, height, 3))
     backgroundColor2 = np.zeros((width, height, 3))
-    backgroundColor1[:,:] = np.array((231,237,222))/256.0
-    backgroundColor2[:,:] = np.array((233,249,206))/256.0
+    backgroundColor1[:,:] = np.array((242,246,238))/256.0
+    backgroundColor2[:,:] = np.array((242,250,230))/256.0
     backgroundTexture[:,:] = backgroundPattern * backgroundColor1 + (1.0 - backgroundPattern) * backgroundColor2
+
+    backgroundPattern2 = np.zeros((width, height, 1))
+    backgroundPattern2[:,:,0] = generate_perlin_noise_2d((width, height), (64, 64))
+    backgroundTexture[:,:] += (backgroundPattern2 - 1.0) * 0.02
 
     splotchTexture = np.zeros((width, height, 3))
     splotchPattern = np.zeros((width, height, 1))
@@ -92,9 +101,9 @@ def generatePillImage():
     splotchColor2[:,:] = np.array((170,12,12))/256.0
     splotchTexture[:,:] = splotchPattern * splotchColor1 + (1.0 - splotchPattern) * splotchColor2
 
-    splotchMask = scipy.ndimage.filters.gaussian_filter(splotchMask, 0.6, order=0)
-
     imageData = splotchMask * splotchTexture + (1.0 - splotchMask) * backgroundTexture
+    imageData[:,:] += np.random.normal(loc=0.0, scale=0.01, size=(width, height, 3))
+
     imageData = cropCircle(imageData)
 
     return imageData
