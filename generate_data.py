@@ -4,6 +4,7 @@ import scipy
 import scipy.stats
 import scipy.misc
 import sklearn
+from pprint import pprint
 import sklearn.preprocessing
 import matplotlib.pyplot as plt
 
@@ -16,7 +17,12 @@ def generate_perlin_noise_2d(shape, res):
     d = (shape[0] // res[0], shape[1] // res[1])
     grid = np.mgrid[0:res[0]:delta[0], 0:res[1]:delta[1]].transpose(1, 2, 0) % 1
     # Gradients
-    angles = 2 * np.pi * np.random.rand(res[0] + 1, res[1] + 1)
+    # noise = np.random.poisson(lam=2.5, size=(res[0] + 1, res[1] + 1))
+    # noise = ((noise - np.min(noise)) / (np.max(noise) - np.min(noise)))
+    # noise = np.random.normal(loc=0.5, scale=0.2, size=(res[0] + 1, res[1] + 1))
+    noise = np.random.rand(res[0] + 1, res[1] + 1)
+    angles = 2 * np.pi * noise
+
     gradients = np.dstack((np.cos(angles), np.sin(angles)))
     g00 = gradients[0:-1, 0:-1].repeat(d[0], 0).repeat(d[1], 1)
     g10 = gradients[1:, 0:-1].repeat(d[0], 0).repeat(d[1], 1)
@@ -74,7 +80,14 @@ def generatePillImage():
 
     # np.random.seed()
     splotchMaskPattern = generate_perlin_noise_2d((splotchPatternWidth, splotchPatternHeight), (16, 16))
-    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.45, copy=False)
+    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.35, copy=False)
+
+    splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
+    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
+
+    splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
+    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
+
     splotchMask = np.zeros((width, height, 1))
     splotchMask[:, :, 0] = splotchMaskPattern[:width, :height]
     splotchMask = scipy.ndimage.filters.gaussian_filter(splotchMask, 0.6, order=0)
@@ -111,7 +124,7 @@ def generatePillImage():
 
 
 
-for n in range(10):
+for n in range(25):
     imageData = generatePillImage()
     plt.imshow(imageData, interpolation='lanczos')
     # plt.show()
