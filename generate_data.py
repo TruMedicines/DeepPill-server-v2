@@ -4,6 +4,8 @@ import scipy
 import scipy.stats
 import scipy.misc
 import sklearn
+import time
+import random
 from pprint import pprint
 import sklearn.preprocessing
 import matplotlib.pyplot as plt
@@ -78,15 +80,15 @@ def generatePillImage():
     splotchPatternWidth = 384
     splotchPatternHeight = 384
 
-    # np.random.seed()
+    np.random.seed(int(time.time() * 1000) % (2 ** 30))
     splotchMaskPattern = generate_perlin_noise_2d((splotchPatternWidth, splotchPatternHeight), (16, 16))
     splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.35, copy=False)
 
-    splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
-    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
-
-    splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
-    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
+    # splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
+    # splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
+    #
+    # splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
+    # splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)
 
     splotchMask = np.zeros((width, height, 1))
     splotchMask[:, :, 0] = splotchMaskPattern[:width, :height]
@@ -121,12 +123,19 @@ def generatePillImage():
 
     return imageData
 
+def generateExamples(save=True):
+    for n in range(25):
+        imageData = generatePillImage()
+
+        if save:
+            plt.imshow(imageData, interpolation='lanczos')
+            # plt.show()
+
+            plt.savefig('example-' + str(n) + ".png")
 
 
+def profileGeneration():
+    import cProfile
+    import re
+    cProfile.run('generateExamples(save=False)')
 
-for n in range(25):
-    imageData = generatePillImage()
-    plt.imshow(imageData, interpolation='lanczos')
-    # plt.show()
-
-    plt.savefig('example-' + str(n) + ".png")
