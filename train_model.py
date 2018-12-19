@@ -88,7 +88,7 @@ def trainModel():
     trainingModel = Model(inputs=[trainingPrimary], outputs=prediction)
     predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
 
-    optimizer = Adam(1e-4)
+    optimizer = Adam(1e-3)
     trainingModel.compile(loss="binary_crossentropy", optimizer=optimizer)
 
     trainingModel.summary()
