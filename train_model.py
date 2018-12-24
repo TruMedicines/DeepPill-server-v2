@@ -289,8 +289,8 @@ def measureAccuracy(model):
                     originalVectors[rotation].append(originalVector)
                     rotatedVectors[rotation].append(rotatedVector)
 
-                if len(originalVectors) % printEvery == 0:
-                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples", flush=True)
+                if len(originalVectors[rotation]) % printEvery == 0:
+                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples for rotation {rotation}", flush=True)
 
     print("    Measuring Final Accuracy")
     allAccuracies = []
