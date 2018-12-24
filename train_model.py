@@ -21,6 +21,7 @@ import sklearn.neighbors
 import json
 from pprint import pprint
 from generate_data import generatePillImage
+import math
 import skimage.transform
 import random
 import concurrent.futures
@@ -76,17 +77,19 @@ def trainModel():
     vectorSize = 1024
     workers = min(16, int(psutil.cpu_count()*0.9))
     stepsPerEpoch = 100
-    firstPassEpochs = 10
+    firstPassEpochs = 20
     secondPassEpochs = 5000
     validationSteps = 10
     maxQueueSize = 10
-    firstPassLearningRate = 2e-3
+    epochsBeforeAccuracyMeasurement = 2
+    firstPassLearningRate = 1e-3
     secondPassLearningRate = 1e-4
     denseDropoutRate = 0.5
     denseFirstLayerSizeMultiplier = 2
     denseActivation = 'softsign'
     finalActivation = 'sigmoid'
     numGPUs = len(get_available_gpus())
+    # numGPUs = 1
 
     def generateBatch():
         nonlocal batchNumber
@@ -146,7 +149,7 @@ def trainModel():
 
     if numGPUs > 1:
         trainingModel = multi_gpu_model(trainingModel, gpus=numGPUs)
-        predictionModel = multi_gpu_model(predictionModel, gpus=2)
+        predictionModel = multi_gpu_model(predictionModel, gpus=numGPUs)
 
     imageNet.layers[0].trainable = False
 
@@ -163,7 +166,7 @@ def trainModel():
 
     def epochCallback(epoch, logs):
         predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
-        if epoch % 10 == 9:
+        if epoch % epochsBeforeAccuracyMeasurement == (epochsBeforeAccuracyMeasurement-1):
             measureAccuracy(predictionModel)
 
     testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
@@ -200,6 +203,9 @@ def trainModel():
     optimizer = Adam(secondPassLearningRate)
     trainingModel.compile(loss=create_triplet_loss(vectorSize), optimizer=optimizer)
 
+    trainingModel.summary()
+    trainingModel.count_params()
+
     trainingModel.fit_generator(
         generator=trainingGenerator,
         steps_per_epoch=stepsPerEpoch,
@@ -213,49 +219,110 @@ def trainModel():
     )
 
 
-globalMeasurementImageFutures = []
+def generateTestImages(rotations):
+    image = generatePillImage()
+    rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
+    return image, rotated
+
+globalMeasurementImages = []
+globalMeasurementRotatedImages = []
 def measureAccuracy(model):
-    global globalMeasurementImageFutures
-    print("Measuring Accuracy on 1,000 images, 15 degree rotation")
+    global globalMeasurementImages
+    global globalMeasurementRotatedImages
+    print("Measuring Accuracy")
 
-    testSamples = 1000
+    batchSize = 32
+    datasetSizesToTest = [200, 1000, 5000]
+    rotationsToTest = [5, 15, 25, 35, 45]
+    maxDatasetSize = max(*datasetSizesToTest)
+    printEvery = 250
 
-    if len(globalMeasurementImageFutures) < testSamples:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=6) as worker:
-            for n in range(testSamples):
-                globalMeasurementImageFutures.append(worker.submit(generatePillImage))
+    if len(globalMeasurementImages) < maxDatasetSize:
+        print("    Generating test images")
+        futures = []
+        with concurrent.futures.ProcessPoolExecutor(max_workers=int(psutil.cpu_count() * 0.9)) as worker:
+            for n in range(maxDatasetSize):
+                futures.append(worker.submit(lambda: generateTestImages(rotationsToTest)))
 
-    originalVectors = []
-    rotatedVectors = []
+            completedImages = 0
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+                completedImages += 1
 
-    for n in range(testSamples):
-        image = globalMeasurementImageFutures[n].result()
-        rotated = skimage.transform.rotate(image, angle=15, mode='constant', cval=1)
+                if completedImages % printEvery == 0:
+                    print(f"        Completed generating {completedImages} images.")
 
-        vectors = model.predict(numpy.array([image, rotated]))
+        globalMeasurementImages = [future.result()[0] for future in futures]
+        globalMeasurementRotatedImages = [future.result()[1] for future in futures]
 
-        if numpy.any(numpy.isnan(vectors)):
-            print("Error, NaN in final vector")
-        else:
-            originalVectors.append(vectors[0])
-            rotatedVectors.append(vectors[1])
+    originalVectors = {
+        rotation: [] for rotation in rotationsToTest
+    }
+    rotatedVectors = {
+        rotation: [] for rotation in rotationsToTest
+    }
 
-        if (n+1) % 100 == 0:
-            print(f"Completed vectors for {n+1} samples")
+    print("    Computing vectors for images")
+    for batch in range(int(math.ceil(maxDatasetSize / batchSize))):
+        batchStart = batch * batchSize
+        batchEnd = (batch + 1) * batchSize
 
-    print(f"Fitting the nearest neighbor model.")
-    nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=1)
-    nearestNeighborModel.fit(originalVectors)
+        batchOriginals = globalMeasurementImages[batchStart:batchEnd]
+        batchOriginalVectors = model.predict(numpy.array(batchOriginals))
 
-    print(f"Computing results of nearest neighbors model.")
-    distance, indices = nearestNeighborModel.kneighbors(rotatedVectors)
+        for rotation in rotationsToTest:
+            batchRotated = globalMeasurementRotatedImages[batchStart:batchEnd][rotation]
+            batchRotatedVectors = model.predict(numpy.array(batchRotated))
 
-    correct = 0
-    for n in range(len(originalVectors)):
-        if indices[n] == n:
-            correct += 1
+            for n in range(len(batchOriginals)):
+                originalVector = batchOriginalVectors[n]
+                rotatedVector = batchRotatedVectors[n]
 
-    accuracy = float(correct) / float(len(originalVectors))
-    print("Nearest Neighbor Accuracy: ", accuracy)
+                if numpy.any(numpy.isnan(originalVector)) or numpy.any(numpy.isnan(rotatedVector)) or numpy.any(numpy.isinf(originalVector)) or numpy.any(numpy.isinf(rotatedVector)):
+                    print("        Error, NaN or infinity in final vector")
+                else:
+                    originalVectors[rotation].append(originalVector)
+                    rotatedVectors[rotation].append(rotatedVector)
+
+                if len(originalVectors) % printEvery == 0:
+                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples")
+
+    print("    Measuring Final Accuracy")
+    allAccuracies = []
+    for rotation in rotationsToTest:
+        if len(originalVectors[rotation]) == 0:
+            print(f"        Error! Unable to measure accuracy for rotation {rotation}. All samples had bad vectors.")
+            continue
+
+        for datasetSize in datasetSizesToTest:
+            print(f"        Measuring accuracy on {rotation} degree rotations with dataset size {datasetSize}")
+
+            vectorIndexes = random.sample(range(len(originalVectors[rotation])), min(len(originalVectors[rotation]), datasetSize))
+
+            origVectorsForTest = [originalVectors[rotation][index] for index in vectorIndexes]
+            rotatedVectorsForTest = [rotatedVectors[rotation][index] for index in vectorIndexes]
+
+            print(f"            Fitting the nearest neighbor model on {len(origVectorsForTest)} samples")
+            nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=1)
+            nearestNeighborModel.fit(origVectorsForTest)
+
+            print(f"            Computing results of nearest neighbors model on rotated images.")
+            distance, indices = nearestNeighborModel.kneighbors(rotatedVectorsForTest)
+
+            correct = 0
+            for n in range(len(origVectorsForTest)):
+                if indices[n] == n:
+                    correct += 1
+
+            accuracy = float(correct) / float(len(origVectorsForTest))
+            print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}")
+            allAccuracies.append(accuracy)
+
+    if len(allAccuracies) == 0:
+        return 0
+
+    meanAccuracy = numpy.mean(allAccuracies)
+    print(f"    Final Mean Accuracy {meanAccuracy}")
+    return meanAccuracy
 
 trainModel()
