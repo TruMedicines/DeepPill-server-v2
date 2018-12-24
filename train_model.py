@@ -25,7 +25,7 @@ import random
 import concurrent.futures
 
 def trainModel():
-    batchSize = 8
+    batchSize = 32
     batchNumber = 0
     minRotation = 5
     maxRotation = 30
@@ -42,7 +42,7 @@ def trainModel():
     denseFirstLayerSizeMultiplier = 2
     denseActivation = 'elu'
     finalActivation = 'tanh'
-    numGPUs = 2
+    numGPUs = 4
 
     def generateBatch():
         nonlocal batchNumber
@@ -62,7 +62,7 @@ def trainModel():
                 rotated2 = skimage.transform.rotate(image2, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
                 inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(numpy.ones(vectorSize)*2.5)
+                outputs.append(numpy.ones(vectorSize)*2.0)
 
             # Generate positives as being the same image except rotated
             for n in range(int(batchSize/2)):
