@@ -34,7 +34,7 @@ def trainModel():
     stepsPerEpoch = 100
     firstPassEpochs = 10
     secondPassEpochs = 5000
-    validationSteps = 50
+    validationSteps = 10
     maxQueueSize = 100
     firstPassLearningRate = 2e-3
     secondPassLearningRate = 1e-4
@@ -42,6 +42,7 @@ def trainModel():
     denseFirstLayerSizeMultiplier = 2
     denseActivation = 'elu'
     finalActivation = 'tanh'
+    numGPUs = 4
 
     def generateBatch():
         nonlocal batchNumber
@@ -101,8 +102,12 @@ def trainModel():
 
         distance = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
 
-    trainingModel = multi_gpu_model(Model(inputs=[trainingPrimary], outputs=distance), gpus=4)
-    predictionModel = multi_gpu_model(Model(inputs=[predictPrimary], outputs=encoded_predict), gpus=4)
+        trainingModel = Model(inputs=[trainingPrimary], outputs=distance)
+        predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
+
+    if numGPUs > 1:
+        trainingModel = multi_gpu_model(trainingModel, gpus=numGPUs)
+        predictionModel = multi_gpu_model(predictionModel, gpus=2)
 
     imageNet.layers[0].trainable = False
 
@@ -119,7 +124,7 @@ def trainModel():
     trainingGenerator = generateBatch()
 
     def epochCallback(epoch, logs):
-        if epoch % 10 == 0:
+        if epoch % 10 == 9:
             measureAccuracy(predictionModel)
 
     testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
