@@ -1,5 +1,5 @@
 from keras.applications import MobileNetV2, InceptionV3
-from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda
+from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda, Concatenate
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.callbacks import LambdaCallback, TensorBoard
@@ -24,6 +24,44 @@ import skimage.transform
 import random
 import concurrent.futures
 
+
+def create_triplet_loss(vectorSize):
+    def triplet_loss(y_true, y_pred, epsilon=1e-8):
+        """
+        Implementation of the triplet loss function
+
+        Arguments:
+        y_true -- true labels, required when you define a loss in Keras, you don't need it in this function.
+        y_pred -- python list containing three objects:
+                anchor -- the encodings for the anchor data
+                positive -- the encodings for the positive data (similar to anchor)
+                negative -- the encodings for the negative data (different from anchor)
+        epsilon -- The Epsilon value to prevent ln(0)
+
+
+        Returns:
+        loss -- real number, value of the loss
+        """
+        anchor = tf.convert_to_tensor(y_pred[:, 0:vectorSize])
+        positive = tf.convert_to_tensor(y_pred[:, vectorSize:vectorSize*2])
+        negative = tf.convert_to_tensor(y_pred[:, vectorSize*2:vectorSize*3])
+
+        # distance between the anchor and the positive
+        pos_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, positive)), 1)
+        # distance between the anchor and the negative
+        neg_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, negative)), 1)
+
+        # -ln(-x/N+1)
+        pos_dist = -tf.log(-tf.divide((pos_dist), vectorSize) + 1 + epsilon)
+        neg_dist = -tf.log(-tf.divide((vectorSize - neg_dist), vectorSize) + 1 + epsilon)
+
+        # compute loss
+        loss = neg_dist + pos_dist
+
+        return loss
+    return triplet_loss
+
+
 def trainModel():
     batchSize = 32
     batchNumber = 0
@@ -35,13 +73,13 @@ def trainModel():
     firstPassEpochs = 10
     secondPassEpochs = 5000
     validationSteps = 10
-    maxQueueSize = 100
+    maxQueueSize = 10
     firstPassLearningRate = 2e-3
     secondPassLearningRate = 1e-4
     denseDropoutRate = 0.5
     denseFirstLayerSizeMultiplier = 2
-    denseActivation = 'elu'
-    finalActivation = 'tanh'
+    denseActivation = 'softsign'
+    finalActivation = 'sigmoid'
     numGPUs = 4
 
     def generateBatch():
@@ -54,30 +92,26 @@ def trainModel():
             outputs = []
 
             # Generate negatives as just separate images
-            for n in range(int(batchSize/2)):
-                image1 = generatePillImage()
-                image2 = generatePillImage()
+            for n in range(int(batchSize)):
+                anchor = generatePillImage()
+                negative = generatePillImage()
 
-                rotated1 = skimage.transform.rotate(image1, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
-                rotated2 = skimage.transform.rotate(image2, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
+                anchorRotated = skimage.transform.rotate(anchor, angle=random.uniform(0, minRotation), mode='constant', cval=1)
+                positiveRotated = skimage.transform.rotate(anchor, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
-                inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(numpy.ones(vectorSize)*2.0)
+                negativeRotated = skimage.transform.rotate(negative, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
-            # Generate positives as being the same image except rotated
-            for n in range(int(batchSize/2)):
-                image = generatePillImage()
-
-                rotated1 = skimage.transform.rotate(image, angle=random.uniform(0, minRotation), mode='constant', cval=1)
-                rotated2 = skimage.transform.rotate(image, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
-
-                inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(numpy.zeros(vectorSize))
+                inputs.append(numpy.array([anchorRotated, positiveRotated, negativeRotated]))
+                outputs.append(numpy.ones(vectorSize)*1.0)
 
             yield numpy.array(inputs), numpy.array(outputs)
 
-    with tf.device("/cpu:0"):
-        trainingPrimary = Input((2, 256, 256, 3))
+    primaryDevice = "/cpu:0"
+    if numGPUs == 1:
+        primaryDevice = "/gpu:0"
+
+    with tf.device(primaryDevice):
+        trainingPrimary = Input((3, 256, 256, 3))
         predictPrimary = Input((256, 256, 3))
 
         imageNet = Sequential()
@@ -92,17 +126,16 @@ def trainModel():
         imageNet.add(Dropout(denseDropoutRate))
         imageNet.add(Dense(vectorSize, activation=finalActivation))
 
-        encoded_l = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
-        encoded_r = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
+        encoded_anchor = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
+        encoded_positive = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
+        encoded_negative = imageNet(Lambda(lambda x: x[:, 2])(trainingPrimary))
+
+        encoded_triplet = Concatenate(axis=1)([encoded_anchor, encoded_positive, encoded_negative])
 
         encoded_predict = imageNet(predictPrimary)
 
-        # merge two encoded inputs with the l1 distance between them
-        L1_distance = lambda x: K.abs(x[0] - x[1])
-
-        distance = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
-
-        trainingModel = Model(inputs=[trainingPrimary], outputs=distance)
+        # Create one model for training using triplet loss, and another model for live prediction
+        trainingModel = Model(inputs=[trainingPrimary], outputs=encoded_triplet)
         predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
 
     if numGPUs > 1:
@@ -112,7 +145,7 @@ def trainModel():
     imageNet.layers[0].trainable = False
 
     optimizer = Adam(firstPassLearningRate)
-    trainingModel.compile(loss="mean_squared_error", optimizer=optimizer)
+    trainingModel.compile(loss=create_triplet_loss(vectorSize), optimizer=optimizer)
 
     trainingModel.summary()
     trainingModel.count_params()
@@ -159,7 +192,7 @@ def trainModel():
     imageNet.layers[0].trainable = True
 
     optimizer = Adam(secondPassLearningRate)
-    trainingModel.compile(loss="mean_squared_error", optimizer=optimizer)
+    trainingModel.compile(loss=create_triplet_loss(vectorSize), optimizer=optimizer)
 
     trainingModel.fit_generator(
         generator=trainingGenerator,
