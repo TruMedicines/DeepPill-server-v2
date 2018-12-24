@@ -3,10 +3,12 @@ from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, In
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.callbacks import LambdaCallback, TensorBoard
+from keras.utils import multi_gpu_model
 from keras.regularizers import l1, l2
 import keras.backend as K
 from keras.preprocessing.image import ImageDataGenerator
 import csv
+import tensorflow as tf
 from scipy.misc import imsave, imread
 import os
 import sklearn.metrics
@@ -23,11 +25,23 @@ import random
 import concurrent.futures
 
 def trainModel():
-    batchSize = 8
+    batchSize = 32
     batchNumber = 0
     minRotation = 5
     maxRotation = 30
     vectorSize = 1024
+    workers = 16
+    stepsPerEpoch = 100
+    firstPassEpochs = 10
+    secondPassEpochs = 5000
+    validationSteps = 50
+    maxQueueSize = 100
+    firstPassLearningRate = 2e-3
+    secondPassLearningRate = 1e-4
+    denseDropoutRate = 0.5
+    denseFirstLayerSizeMultiplier = 2
+    denseActivation = 'elu'
+    finalActivation = 'tanh'
 
     def generateBatch():
         nonlocal batchNumber
@@ -61,38 +75,38 @@ def trainModel():
 
             yield numpy.array(inputs), numpy.array(outputs)
 
+    with tf.device("/cpu:0"):
+        trainingPrimary = Input((2, 256, 256, 3))
+        predictPrimary = Input((256, 256, 3))
 
-    trainingPrimary = Input((2, 256, 256, 3))
-    predictPrimary = Input((256, 256, 3))
+        imageNet = Sequential()
+        imageNetCore = InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights='imagenet')
 
-    imageNet = Sequential()
-    imageNetCore = InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights='imagenet')
+        imageNet.add(imageNetCore)
+        imageNet.add(Reshape([-1]))
+        imageNet.add(BatchNormalization())
+        imageNet.add(Dropout(denseDropoutRate))
+        imageNet.add(Dense(int(vectorSize*denseFirstLayerSizeMultiplier), activation=denseActivation))
+        imageNet.add(BatchNormalization())
+        imageNet.add(Dropout(denseDropoutRate))
+        imageNet.add(Dense(vectorSize, activation=finalActivation))
 
-    imageNet.add(imageNetCore)
-    imageNet.add(Reshape([-1]))
-    imageNet.add(BatchNormalization())
-    imageNet.add(Dropout(0.5))
-    imageNet.add(Dense(vectorSize*2, activation='elu'))
-    imageNet.add(BatchNormalization())
-    imageNet.add(Dropout(0.5))
-    imageNet.add(Dense(vectorSize, activation='tanh'))
+        encoded_l = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
+        encoded_r = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
 
-    encoded_l = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
-    encoded_r = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
+        encoded_predict = imageNet(predictPrimary)
 
-    encoded_predict = imageNet(predictPrimary)
+        # merge two encoded inputs with the l1 distance between them
+        L1_distance = lambda x: K.abs(x[0] - x[1])
 
-    # merge two encoded inputs with the l1 distance between them
-    L1_distance = lambda x: K.abs(x[0] - x[1])
+        distance = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
 
-    distance = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
-
-    trainingModel = Model(inputs=[trainingPrimary], outputs=distance)
-    predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
+    trainingModel = multi_gpu_model(Model(inputs=[trainingPrimary], outputs=distance), gpus=4)
+    predictionModel = multi_gpu_model(Model(inputs=[predictPrimary], outputs=encoded_predict), gpus=4)
 
     imageNet.layers[0].trainable = False
 
-    optimizer = Adam(2e-3)
+    optimizer = Adam(firstPassLearningRate)
     trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
     predictionModel.compile(loss="mean_absolute_error", optimizer=optimizer)
 
@@ -125,13 +139,13 @@ def trainModel():
 
     trainingModel.fit_generator(
         generator=trainingGenerator,
-        steps_per_epoch=100,
-        epochs=10,
+        steps_per_epoch=stepsPerEpoch,
+        epochs=firstPassEpochs,
         validation_data=testingGenerator,
-        validation_steps=50,
-        workers=7,
+        validation_steps=validationSteps,
+        workers=workers,
         use_multiprocessing=True,
-        max_queue_size=100,
+        max_queue_size=maxQueueSize,
         callbacks=[testNearestNeighbor, tensorBoardCallback]
     )
 
@@ -139,18 +153,18 @@ def trainModel():
 
     imageNet.layers[0].trainable = True
 
-    optimizer = Adam(1e-4)
+    optimizer = Adam(secondPassLearningRate)
     trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
 
     trainingModel.fit_generator(
         generator=trainingGenerator,
-        steps_per_epoch=100,
-        epochs=5000,
+        steps_per_epoch=stepsPerEpoch,
+        epochs=secondPassEpochs,
         validation_data=testingGenerator,
-        validation_steps=50,
-        workers=7,
+        validation_steps=validationSteps,
+        workers=workers,
         use_multiprocessing=True,
-        max_queue_size=100,
+        max_queue_size=maxQueueSize,
         callbacks=[testNearestNeighbor, tensorBoardCallback]
     )
 
