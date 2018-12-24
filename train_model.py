@@ -82,7 +82,7 @@ def trainModel():
     secondPassEpochs = 5000
     validationSteps = 10
     maxQueueSize = 10
-    epochsBeforeAccuracyMeasurement = 2
+    epochsBeforeAccuracyMeasurement = 10
     firstPassLearningRate = 1e-3
     secondPassLearningRate = 1e-4
     denseDropoutRate = 0.5
@@ -226,7 +226,7 @@ def generateTestImages(rotations):
     return image, rotated
 
 globalMeasurementImages = []
-globalMeasurementRotatedImages = []
+globalMeasurementRotatedImages = {}
 def measureAccuracy(model):
     global globalMeasurementImages
     global globalMeasurementRotatedImages
@@ -237,6 +237,9 @@ def measureAccuracy(model):
     rotationsToTest = [5, 15, 25, 35, 45]
     maxDatasetSize = max(*datasetSizesToTest)
     printEvery = 250
+    globalMeasurementRotatedImages = {
+        rotation: [] for rotation in rotationsToTest
+    }
 
     if len(globalMeasurementImages) < maxDatasetSize:
         print("    Generating test images")
@@ -250,7 +253,8 @@ def measureAccuracy(model):
 
                 for future in concurrent.futures.as_completed(futures):
                     globalMeasurementImages.append(future.result()[0])
-                    globalMeasurementRotatedImages.append(future.result()[0])
+                    for rotation in rotationsToTest:
+                        globalMeasurementRotatedImages[rotation].append(future.result()[1][rotation])
                     completedImages += 1
 
                     if completedImages % printEvery == 0:
@@ -272,7 +276,7 @@ def measureAccuracy(model):
         batchOriginalVectors = model.predict(numpy.array(batchOriginals))
 
         for rotation in rotationsToTest:
-            batchRotated = globalMeasurementRotatedImages[batchStart:batchEnd][rotation]
+            batchRotated = globalMeasurementRotatedImages[rotation][batchStart:batchEnd]
             batchRotatedVectors = model.predict(numpy.array(batchRotated))
 
             for n in range(len(batchOriginals)):
