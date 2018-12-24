@@ -19,6 +19,7 @@ import os.path
 import random
 import sklearn.neighbors
 import json
+import sys
 from pprint import pprint
 from generate_data import generatePillImage
 import math
@@ -229,7 +230,7 @@ globalMeasurementRotatedImages = []
 def measureAccuracy(model):
     global globalMeasurementImages
     global globalMeasurementRotatedImages
-    print("Measuring Accuracy")
+    print("Measuring Accuracy", flush=True)
 
     batchSize = 32
     datasetSizesToTest = [200, 1000, 5000]
@@ -239,21 +240,21 @@ def measureAccuracy(model):
 
     if len(globalMeasurementImages) < maxDatasetSize:
         print("    Generating test images")
-        futures = []
-        with concurrent.futures.ProcessPoolExecutor(max_workers=int(psutil.cpu_count() * 0.9)) as worker:
-            for n in range(maxDatasetSize):
-                futures.append(worker.submit(generateTestImages, rotationsToTest))
+        completedImages = 0
+        # Build images in sets of 10 batches. This is to get around a python multiprocessing bug.
+        for k in range(10):
+            futures = []
+            with concurrent.futures.ProcessPoolExecutor(max_workers=int(psutil.cpu_count() * 0.9)) as worker:
+                for n in range(int(maxDatasetSize/10)):
+                    futures.append(worker.submit(generateTestImages, rotationsToTest))
 
-            completedImages = 0
-            for future in concurrent.futures.as_completed(futures):
-                future.result()
-                completedImages += 1
+                for future in concurrent.futures.as_completed(futures):
+                    globalMeasurementImages.append(future.result()[0])
+                    globalMeasurementRotatedImages.append(future.result()[0])
+                    completedImages += 1
 
-                if completedImages % printEvery == 0:
-                    print(f"        Completed generating {completedImages} images.")
-
-        globalMeasurementImages = [future.result()[0] for future in futures]
-        globalMeasurementRotatedImages = [future.result()[1] for future in futures]
+                    if completedImages % printEvery == 0:
+                        print(f"        Completed generating {completedImages} images.", flush=True)
 
     originalVectors = {
         rotation: [] for rotation in rotationsToTest
@@ -285,7 +286,7 @@ def measureAccuracy(model):
                     rotatedVectors[rotation].append(rotatedVector)
 
                 if len(originalVectors) % printEvery == 0:
-                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples")
+                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples", flush=True)
 
     print("    Measuring Final Accuracy")
     allAccuracies = []
@@ -315,14 +316,14 @@ def measureAccuracy(model):
                     correct += 1
 
             accuracy = float(correct) / float(len(origVectorsForTest))
-            print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}")
+            print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
             allAccuracies.append(accuracy)
 
     if len(allAccuracies) == 0:
         return 0
 
     meanAccuracy = numpy.mean(allAccuracies)
-    print(f"    Final Mean Accuracy {meanAccuracy}")
+    print(f"    Final Mean Accuracy {meanAccuracy}", flush=True)
     return meanAccuracy
 
 trainModel()
