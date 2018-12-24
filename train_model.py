@@ -13,6 +13,7 @@ from scipy.misc import imsave, imread
 import os
 import sklearn.metrics
 import numpy
+import psutil
 import matplotlib.pyplot as plt
 import os.path
 import random
@@ -23,6 +24,11 @@ from generate_data import generatePillImage
 import skimage.transform
 import random
 import concurrent.futures
+from tensorflow.python.client import device_lib
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 
 def create_triplet_loss(vectorSize):
@@ -68,7 +74,7 @@ def trainModel():
     minRotation = 5
     maxRotation = 30
     vectorSize = 1024
-    workers = 16
+    workers = min(16, int(psutil.cpu_count()*0.9))
     stepsPerEpoch = 100
     firstPassEpochs = 10
     secondPassEpochs = 5000
@@ -80,7 +86,7 @@ def trainModel():
     denseFirstLayerSizeMultiplier = 2
     denseActivation = 'softsign'
     finalActivation = 'sigmoid'
-    numGPUs = 4
+    numGPUs = len(get_available_gpus())
 
     def generateBatch():
         nonlocal batchNumber
