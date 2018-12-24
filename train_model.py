@@ -228,8 +228,12 @@ def measureAccuracy(model):
 
         vectors = model.predict(numpy.array([image, rotated]))
 
-        originalVectors.append(vectors[0])
-        rotatedVectors.append(vectors[1])
+        if numpy.any(numpy.isnan(vectors)):
+            print("Error, NaN in final vector")
+        else:
+            originalVectors.append(vectors[0])
+            rotatedVectors.append(vectors[1])
+
         if (n+1) % 100 == 0:
             print(f"Completed vectors for {n+1} samples")
 
@@ -241,11 +245,11 @@ def measureAccuracy(model):
     distance, indices = nearestNeighborModel.kneighbors(rotatedVectors)
 
     correct = 0
-    for n in range(testSamples):
+    for n in range(len(originalVectors)):
         if indices[n] == n:
             correct += 1
 
-    accuracy = float(correct) / float(testSamples)
+    accuracy = float(correct) / float(len(originalVectors))
     print("Nearest Neighbor Accuracy: ", accuracy)
 
 trainModel()
