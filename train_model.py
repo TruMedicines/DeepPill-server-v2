@@ -2,7 +2,7 @@ from keras.applications import MobileNetV2, InceptionV3
 from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-from keras.callbacks import LambdaCallback
+from keras.callbacks import LambdaCallback, TensorBoard
 from keras.regularizers import l1, l2
 import keras.backend as K
 from keras.preprocessing.image import ImageDataGenerator
@@ -27,6 +27,7 @@ def trainModel():
     batchNumber = 0
     minRotation = 5
     maxRotation = 30
+    vectorSize = 1024
 
     def generateBatch():
         nonlocal batchNumber
@@ -46,7 +47,7 @@ def trainModel():
                 rotated2 = skimage.transform.rotate(image2, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
                 inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(0)
+                outputs.append(numpy.ones(vectorSize)*2)
 
             # Generate positives as being the same image except rotated
             for n in range(int(batchSize/2)):
@@ -56,7 +57,7 @@ def trainModel():
                 rotated2 = skimage.transform.rotate(image, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
                 inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(1)
+                outputs.append(numpy.zeros(vectorSize))
 
             yield numpy.array(inputs), numpy.array(outputs)
 
@@ -65,14 +66,16 @@ def trainModel():
     predictPrimary = Input((256, 256, 3))
 
     imageNet = Sequential()
-    imageNet.add(InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=None))
+    imageNetCore = InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights='imagenet')
+
+    imageNet.add(imageNetCore)
     imageNet.add(Reshape([-1]))
     imageNet.add(BatchNormalization())
     imageNet.add(Dropout(0.5))
-    imageNet.add(Dense(1024, activation='elu'))
+    imageNet.add(Dense(vectorSize*2, activation='elu'))
     imageNet.add(BatchNormalization())
     imageNet.add(Dropout(0.5))
-    imageNet.add(Dense(256, activation='tanh'))
+    imageNet.add(Dense(vectorSize, activation='tanh'))
 
     encoded_l = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
     encoded_r = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
@@ -82,14 +85,16 @@ def trainModel():
     # merge two encoded inputs with the l1 distance between them
     L1_distance = lambda x: K.abs(x[0] - x[1])
 
-    both = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
+    distance = Lambda(L1_distance, output_shape=lambda x: x[0])([encoded_l, encoded_r])
 
-    prediction = Dense(1, activation='sigmoid')(both)
-    trainingModel = Model(inputs=[trainingPrimary], outputs=prediction)
+    trainingModel = Model(inputs=[trainingPrimary], outputs=distance)
     predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
 
-    optimizer = Adam(1e-3)
-    trainingModel.compile(loss="binary_crossentropy", optimizer=optimizer)
+    imageNet.layers[0].trainable = False
+
+    optimizer = Adam(2e-3)
+    trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
+    predictionModel.compile(loss="mean_absolute_error", optimizer=optimizer)
 
     trainingModel.summary()
     trainingModel.count_params()
@@ -100,23 +105,54 @@ def trainModel():
     trainingGenerator = generateBatch()
 
     def epochCallback(epoch, logs):
-        predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
-        measureAccuracy(predictionModel)
+        if epoch % 10 == 0:
+            measureAccuracy(predictionModel)
 
     testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
 
+    tensorBoardCallback = TensorBoard(
+        log_dir='./logs',
+        histogram_freq=0,
+        batch_size=batchSize,
+        write_graph=True,
+        write_grads=False,
+        write_images=False,
+        embeddings_freq=0,
+        embeddings_layer_names=None,
+        embeddings_metadata=None,
+        embeddings_data=None,
+        update_freq='batch')
+
     trainingModel.fit_generator(
         generator=trainingGenerator,
-        steps_per_epoch=1000,
-        epochs=50,
+        steps_per_epoch=100,
+        epochs=10,
         validation_data=testingGenerator,
-        validation_steps=10,
+        validation_steps=50,
         workers=7,
         use_multiprocessing=True,
-        max_queue_size=50,
-        callbacks=[testNearestNeighbor]
+        max_queue_size=100,
+        callbacks=[testNearestNeighbor, tensorBoardCallback]
     )
 
+    # K.clear_session()
+
+    imageNet.layers[0].trainable = True
+
+    optimizer = Adam(1e-4)
+    trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
+
+    trainingModel.fit_generator(
+        generator=trainingGenerator,
+        steps_per_epoch=100,
+        epochs=5000,
+        validation_data=testingGenerator,
+        validation_steps=50,
+        workers=7,
+        use_multiprocessing=True,
+        max_queue_size=100,
+        callbacks=[testNearestNeighbor, tensorBoardCallback]
+    )
 
 
 globalMeasurementImageFutures = []
