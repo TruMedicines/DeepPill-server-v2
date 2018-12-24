@@ -25,7 +25,7 @@ import random
 import concurrent.futures
 
 def trainModel():
-    batchSize = 32
+    batchSize = 8
     batchNumber = 0
     minRotation = 5
     maxRotation = 30
@@ -42,7 +42,7 @@ def trainModel():
     denseFirstLayerSizeMultiplier = 2
     denseActivation = 'elu'
     finalActivation = 'tanh'
-    numGPUs = 4
+    numGPUs = 2
 
     def generateBatch():
         nonlocal batchNumber
@@ -62,7 +62,7 @@ def trainModel():
                 rotated2 = skimage.transform.rotate(image2, angle=random.uniform(minRotation, maxRotation), mode='constant', cval=1)
 
                 inputs.append(numpy.array([rotated1, rotated2]))
-                outputs.append(numpy.ones(vectorSize)*2)
+                outputs.append(numpy.ones(vectorSize)*2.5)
 
             # Generate positives as being the same image except rotated
             for n in range(int(batchSize/2)):
@@ -112,8 +112,7 @@ def trainModel():
     imageNet.layers[0].trainable = False
 
     optimizer = Adam(firstPassLearningRate)
-    trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
-    predictionModel.compile(loss="mean_absolute_error", optimizer=optimizer)
+    trainingModel.compile(loss="mean_squared_error", optimizer=optimizer)
 
     trainingModel.summary()
     trainingModel.count_params()
@@ -124,6 +123,7 @@ def trainModel():
     trainingGenerator = generateBatch()
 
     def epochCallback(epoch, logs):
+        predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
         if epoch % 10 == 9:
             measureAccuracy(predictionModel)
 
@@ -159,7 +159,7 @@ def trainModel():
     imageNet.layers[0].trainable = True
 
     optimizer = Adam(secondPassLearningRate)
-    trainingModel.compile(loss="mean_absolute_error", optimizer=optimizer)
+    trainingModel.compile(loss="mean_squared_error", optimizer=optimizer)
 
     trainingModel.fit_generator(
         generator=trainingGenerator,
