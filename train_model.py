@@ -242,7 +242,7 @@ def measureAccuracy(model):
         futures = []
         with concurrent.futures.ProcessPoolExecutor(max_workers=int(psutil.cpu_count() * 0.9)) as worker:
             for n in range(maxDatasetSize):
-                futures.append(worker.submit(lambda: generateTestImages(rotationsToTest)))
+                futures.append(worker.submit(generateTestImages, rotationsToTest))
 
             completedImages = 0
             for future in concurrent.futures.as_completed(futures):
