@@ -17,6 +17,7 @@ import psutil
 import matplotlib.pyplot as plt
 import os.path
 import random
+import copy
 import sklearn.neighbors
 import json
 import sys
@@ -237,11 +238,12 @@ def measureAccuracy(model):
     rotationsToTest = [5, 15, 25, 35, 45]
     maxDatasetSize = max(*datasetSizesToTest)
     printEvery = 250
-    globalMeasurementRotatedImages = {
-        rotation: [] for rotation in rotationsToTest
-    }
 
     if len(globalMeasurementImages) < maxDatasetSize:
+        globalMeasurementRotatedImages = {
+            rotation: [] for rotation in rotationsToTest
+        }
+
         print("    Generating test images")
         completedImages = 0
         # Build images in sets of 10 batches. This is to get around a python multiprocessing bug.
@@ -289,8 +291,8 @@ def measureAccuracy(model):
                     originalVectors[rotation].append(originalVector)
                     rotatedVectors[rotation].append(rotatedVector)
 
-                if len(originalVectors[rotation]) % printEvery == 0:
-                    print(f"        Completed vectors for {len(originalVectors[[rotation]])} samples for rotation {rotation}", flush=True)
+        if len(originalVectors[rotationsToTest[0]]) % printEvery == 0:
+            print(f"        Completed vectors for {len(originalVectors[rotationsToTest[0]])} samples", flush=True)
 
     print("    Measuring Final Accuracy")
     allAccuracies = []
