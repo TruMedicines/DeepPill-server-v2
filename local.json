@@ -14,5 +14,5 @@
     "testingBatchSize": 64,
     "numGPUs": 1,
     "epochsBeforeAccuracyMeasurement": 2,
-    "datasetSizesToTest": [200, 1000, 1500]
+    "datasetSizesToTest": [500, 1000, 1500]
 }

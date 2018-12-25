@@ -81,7 +81,7 @@ class PillRecognitionModel:
 
         self.testingBatchSize = parameters['testingBatchSize']
         self.datasetSizesToTest = parameters['datasetSizesToTest']
-        self.rotationsToTest = parameters['datasetSizesToTest']
+        self.rotationsToTest = parameters['rotationsToTest']
         self.testingPrintEvery = parameters['testingPrintEvery']
         self.measurementImages = []
         self.measurementRotatedImages = {}
@@ -386,13 +386,13 @@ class PillRecognitionModel:
                 accuracy = float(correct) / float(len(origVectorsForTest))
                 print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
                 allAccuracies.append(accuracy)
-                sizeAccuracies[f'size_{str(datasetSize)}'] = allAccuracies
-                accuracyRows.append(sizeAccuracies)
+                sizeAccuracies[f'size_{str(datasetSize)}'] = accuracy
+            accuracyRows.append(sizeAccuracies)
 
         if len(allAccuracies) == 0:
             return 0
 
-        writer = csv.DictWriter(sys.stdout, fieldnames=list(accuracyRows[0].keys()))
+        writer = csv.DictWriter(sys.stdout, fieldnames=list(accuracyRows[0].keys()), dialect=csv.excel_tab)
         writer.writeheader()
         writer.writerows(accuracyRows)
         print("")
