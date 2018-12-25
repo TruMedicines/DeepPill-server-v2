@@ -1,0 +1,22 @@
+{
+    "stepsPerEpoch": 100,
+    "validationSteps": 10,
+    "maxQueueSize": 10,
+    "epochsBeforeAccuracyMeasurement": 10,
+    "startingWeights": "imagenet",
+    "testingPrintEvery": 250,
+    "datasetSizesToTest": [200, 1000, 5000],
+    "rotationsToTest": [5, 15, 25, 35, 45],
+    "numGPUs": -1,
+    "enableTensorboard": false,
+    "minScale": 0.9,
+    "maxScale": 1.1,
+    "minTranslate": -0.1,
+    "maxTranslate": 0.1,
+    "piecewiseAffine": 0.02,
+    "minGaussianBlur": 0,
+    "maxGaussianBlur": 1,
+    "minMotionBlur": 5,
+    "maxMotionBlur": 11,
+    "gaussianNoiseStrength": 0.1
+}
