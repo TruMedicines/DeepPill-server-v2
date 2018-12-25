@@ -6,7 +6,7 @@
     "firstPassEpochs": 20,
     "secondPassEpochs": 5000,
     "firstPassLearningRate": 1e-3,
-    "secondPassLearningRate": 1e-4,
+    "secondPassLearningRate": 1e-3,
     "denseDropoutRate": 0.5,
     "denseFirstLayerSizeMultiplier": 2,
     "denseActivation": "softsign",
