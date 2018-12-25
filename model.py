@@ -40,7 +40,7 @@ class PillRecognitionModel:
         self.minRotation = parameters['minRotation']
         self.maxRotation = parameters['maxRotation']
         self.vectorSize = parameters['vectorSize']
-        self.workers = min(16, int(psutil.cpu_count()*0.9))
+        self.workers = int(psutil.cpu_count()*0.9)
         self.stepsPerEpoch = parameters['stepsPerEpoch']
         self.firstPassEpochs = parameters['firstPassEpochs']
         self.secondPassEpochs = parameters['secondPassEpochs']
@@ -360,7 +360,7 @@ class PillRecognitionModel:
                 continue
 
             sizeAccuracies = {
-                "rotation": rotation
+                "rot": rotation
             }
 
             for datasetSize in self.datasetSizesToTest:
@@ -386,7 +386,7 @@ class PillRecognitionModel:
                 accuracy = float(correct) / float(len(origVectorsForTest))
                 print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
                 allAccuracies.append(accuracy)
-                sizeAccuracies[f'size_{str(datasetSize)}'] = accuracy
+                sizeAccuracies[f's_{str(datasetSize)}'] = accuracy
             accuracyRows.append(sizeAccuracies)
 
         if len(allAccuracies) == 0:

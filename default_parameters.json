@@ -1,7 +1,7 @@
 {
     "stepsPerEpoch": 100,
     "validationSteps": 10,
-    "maxQueueSize": 10,
+    "maxQueueSize": 25,
     "epochsBeforeAccuracyMeasurement": 10,
     "startingWeights": "imagenet",
     "testingPrintEvery": 250,
