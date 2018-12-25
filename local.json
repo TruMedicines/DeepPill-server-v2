@@ -1,5 +1,5 @@
 {
-    "batchSize": 4,
+    "batchSize": 8,
     "minRotation": -45,
     "maxRotation": 45,
     "vectorSize": 512,

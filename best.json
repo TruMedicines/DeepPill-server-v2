@@ -1,5 +1,5 @@
 {
-    "batchSize": 32,
+    "batchSize": 64,
     "minRotation": -45,
     "maxRotation": 45,
     "vectorSize": 512,
@@ -11,5 +11,5 @@
     "denseFirstLayerSizeMultiplier": 2,
     "denseActivation": "softsign",
     "finalActivation": "sigmoid",
-    "testingBatchSize": 64
+    "testingBatchSize": 128
 }

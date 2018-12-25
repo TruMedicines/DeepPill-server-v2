@@ -22,6 +22,7 @@ import copy
 import sklearn.neighbors
 import json
 import sys
+import threading
 from pprint import pprint
 from generate_data import generatePillImage
 import math
@@ -40,7 +41,7 @@ class PillRecognitionModel:
         self.minRotation = parameters['minRotation']
         self.maxRotation = parameters['maxRotation']
         self.vectorSize = parameters['vectorSize']
-        self.workers = int(psutil.cpu_count()*0.9)
+        self.workers = int(psutil.cpu_count()*0.8)
         self.stepsPerEpoch = parameters['stepsPerEpoch']
         self.firstPassEpochs = parameters['firstPassEpochs']
         self.secondPassEpochs = parameters['secondPassEpochs']
@@ -54,6 +55,7 @@ class PillRecognitionModel:
         self.denseActivation = parameters['denseActivation']
         self.finalActivation = parameters['finalActivation']
         self.startingWeights = parameters['startingWeights']
+        self.trainFinalLayersFirst = parameters['trainFinalLayersFirst']
 
         self.minScale = parameters["minScale"]
         self.maxScale = parameters["maxScale"]
@@ -97,6 +99,27 @@ class PillRecognitionModel:
             iaa.MotionBlur(k=(self.minMotionBlur, self.maxMotionBlur)),
             iaa.AdditiveGaussianNoise(scale=self.gaussianNoiseStrength * 255)
         ])
+
+        self.maxImagesToGenerate = 1000
+        self.imageGenerationManager = multiprocessing.Manager()
+        self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+        self.generatedImages = self.imageGenerationManager.list()
+        self.imageGenerationThreads = []
+        for n in range(2):
+            newThread = threading.Thread(target=self.imageGenerationThread, daemon=True)
+            newThread.start()
+            self.imageGenerationThreads.append(newThread)
+
+    def imageGenerationThread(self):
+        while True:
+            future = self.imageGenerationExecutor.submit(generatePillImage)
+            image = future.result()
+            if len(self.generatedImages) >= self.maxImagesToGenerate:
+                randomIndex = random.randint(0, len(self.generatedImages)-1)
+                self.generatedImages[randomIndex] = image
+            else:
+                self.generatedImages.append(image)
+
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -158,8 +181,9 @@ class PillRecognitionModel:
 
             # Generate negatives as just separate images
             for n in range(int(self.batchSize)):
-                anchor = generatePillImage()
-                negative = generatePillImage()
+                anchor, negative = random.sample(range(len(self.generatedImages)), 2)
+                anchor = self.generatedImages[anchor]
+                negative = self.generatedImages[negative]
 
                 anchorAugmented, positiveAugmented, negativeAugmented = self.augmentation.augment_images(numpy.array([anchor, copy.copy(anchor), negative]) * 255.0)
                 anchorAugmented /= 255.0
@@ -221,15 +245,6 @@ class PillRecognitionModel:
             trainingModel = multi_gpu_model(trainingModel, gpus=self.numGPUs)
             predictionModel = multi_gpu_model(predictionModel, gpus=self.numGPUs)
 
-        imageNet.layers[0].trainable = False
-
-        optimizer = Adam(self.firstPassLearningRate)
-        trainingModel.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
-
-        trainingModel.summary()
-        trainingModel.count_params()
-        predictionModel.summary()
-        predictionModel.count_params()
 
         testingGenerator = self.generateBatch(testing=True)
         trainingGenerator = self.generateBatch(testing=False)
@@ -258,19 +273,26 @@ class PillRecognitionModel:
                 update_freq='batch')
             callbacks.append(tensorBoardCallback)
 
-        trainingModel.fit_generator(
-            generator=trainingGenerator,
-            steps_per_epoch=self.stepsPerEpoch,
-            epochs=self.firstPassEpochs,
-            validation_data=testingGenerator,
-            validation_steps=self.validationSteps,
-            workers=self.workers,
-            use_multiprocessing=True,
-            max_queue_size=self.maxQueueSize,
-            callbacks=callbacks
-        )
+        if self.trainFinalLayersFirst:
+            imageNet.layers[0].trainable = False
 
-        # K.clear_session()
+            optimizer = Adam(self.firstPassLearningRate)
+            trainingModel.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
+
+            trainingModel.summary()
+            trainingModel.count_params()
+
+            trainingModel.fit_generator(
+                generator=trainingGenerator,
+                steps_per_epoch=self.stepsPerEpoch,
+                epochs=self.firstPassEpochs,
+                validation_data=testingGenerator,
+                validation_steps=self.validationSteps,
+                workers=self.workers,
+                use_multiprocessing=True,
+                max_queue_size=self.maxQueueSize,
+                callbacks=callbacks
+            )
 
         imageNet.layers[0].trainable = True
 
@@ -306,7 +328,7 @@ class PillRecognitionModel:
             # Build images in sets of 10 batches. This is to get around a python multiprocessing bug.
             for k in range(10):
                 futures = []
-                with concurrent.futures.ProcessPoolExecutor(max_workers=int(psutil.cpu_count() * 0.9)) as worker:
+                with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as worker:
                     for n in range(int(maxDatasetSize/10)):
                         futures.append(worker.submit(globalGenerateTestImages, self.rotationsToTest))
 
