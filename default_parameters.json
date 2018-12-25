@@ -2,7 +2,7 @@
     "stepsPerEpoch": 100,
     "validationSteps": 10,
     "maxQueueSize": 25,
-    "epochsBeforeAccuracyMeasurement": 10,
+    "epochsBeforeAccuracyMeasurement": 5,
     "startingWeights": null,
     "trainFinalLayersFirst": false,
     "testingPrintEvery": 250,

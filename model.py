@@ -226,7 +226,6 @@ class PillRecognitionModel:
             imageNet.add(Dropout(self.denseDropoutRate))
             imageNet.add(Dense(int(self.vectorSize*self.denseFirstLayerSizeMultiplier), activation=self.denseActivation))
             imageNet.add(BatchNormalization())
-            imageNet.add(Dropout(self.denseDropoutRate))
             imageNet.add(Dense(self.vectorSize, activation=self.finalActivation))
 
             encoded_anchor = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
