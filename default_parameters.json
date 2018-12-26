@@ -1,8 +1,8 @@
 {
-    "stepsPerEpoch": 100,
-    "validationSteps": 10,
+    "stepsPerEpoch": 500,
+    "validationSteps": 50,
     "maxQueueSize": 25,
-    "epochsBeforeAccuracyMeasurement": 5,
+    "epochsBeforeAccuracyMeasurement": 2,
     "startingWeights": null,
     "trainFinalLayersFirst": false,
     "testingPrintEvery": 250,
@@ -19,5 +19,8 @@
     "maxGaussianBlur": 1,
     "minMotionBlur": 5,
     "maxMotionBlur": 11,
-    "gaussianNoiseStrength": 0.1
+    "gaussianNoiseStrength": 0.1,
+    "imageGenerationWorkers": 4,
+    "reduceLRPatience": 5,
+    "reduceLRFactor": 0.75
 }

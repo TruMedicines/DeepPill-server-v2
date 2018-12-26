@@ -57,6 +57,9 @@ class PillRecognitionModel:
         self.startingWeights = parameters['startingWeights']
         self.trainFinalLayersFirst = parameters['trainFinalLayersFirst']
 
+        self.reduceLRPatience = parameters['reduceLRPatience']
+        self.reduceLRFactor = parameters['reduceLRFactor']
+
         self.minScale = parameters["minScale"]
         self.maxScale = parameters["maxScale"]
         self.minTranslate = parameters["minTranslate"]
@@ -102,10 +105,10 @@ class PillRecognitionModel:
 
         self.maxImagesToGenerate = 1000
         self.imageGenerationManager = multiprocessing.Manager()
-        self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+        self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
         self.generatedImages = self.imageGenerationManager.list()
         self.imageGenerationThreads = []
-        for n in range(2):
+        for n in range(parameters['imageGenerationWorkers']):
             newThread = threading.Thread(target=self.imageGenerationThread, daemon=True)
             newThread.start()
             self.imageGenerationThreads.append(newThread)
@@ -126,7 +129,7 @@ class PillRecognitionModel:
         return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
     def create_triplet_loss(self):
-        def triplet_loss(y_true, y_pred, epsilon=1e-8):
+        def triplet_loss(y_true, y_pred, epsilon=1e-6):
             """
             Implementation of the triplet loss function
 
@@ -151,9 +154,11 @@ class PillRecognitionModel:
             # distance between the anchor and the negative
             neg_dist = tf.reduce_sum(tf.square(tf.subtract(anchor, negative)), 1)
 
+            beta = self.vectorSize + 1
+
             # -ln(-x/N+1)
-            pos_dist = -tf.log(-tf.divide((pos_dist), self.vectorSize) + 1 + epsilon)
-            neg_dist = -tf.log(-tf.divide((self.vectorSize - neg_dist), self.vectorSize) + 1 + epsilon)
+            pos_dist = -tf.log(-tf.divide((pos_dist), beta) + 1 + epsilon)
+            neg_dist = -tf.log(-tf.divide((self.vectorSize - neg_dist), beta) + 1 + epsilon)
 
             # compute loss
             loss = neg_dist + pos_dist
@@ -255,7 +260,7 @@ class PillRecognitionModel:
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
 
-        reduceLRCallback = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1)
+        reduceLRCallback = ReduceLROnPlateau(monitor='loss', factor=self.reduceLRFactor, patience=self.reduceLRPatience, verbose=1)
 
         callbacks = [testNearestNeighbor, reduceLRCallback]
 
