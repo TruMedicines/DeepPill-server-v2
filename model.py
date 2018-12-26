@@ -1,8 +1,8 @@
-from keras.applications import MobileNetV2, InceptionV3
+from keras.applications import MobileNetV2, InceptionV3, ResNet50
 from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda, Concatenate
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-from keras.callbacks import LambdaCallback, TensorBoard
+from keras.callbacks import LambdaCallback, TensorBoard, ReduceLROnPlateau
 from keras.utils import multi_gpu_model
 from keras.regularizers import l1, l2
 import keras.backend as K
@@ -218,7 +218,7 @@ class PillRecognitionModel:
             predictPrimary = Input((256, 256, 3))
 
             imageNet = Sequential()
-            imageNetCore = InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=self.parameters['startingWeights'])
+            imageNetCore = ResNet50(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=self.parameters['startingWeights'])
 
             imageNet.add(imageNetCore)
             imageNet.add(Reshape([-1]))
@@ -255,7 +255,9 @@ class PillRecognitionModel:
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
 
-        callbacks = [testNearestNeighbor]
+        reduceLRCallback = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1)
+
+        callbacks = [testNearestNeighbor, reduceLRCallback]
 
         if self.enableTensorboard:
             tensorBoardCallback = TensorBoard(
