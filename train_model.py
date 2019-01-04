@@ -2,6 +2,7 @@ from model import PillRecognitionModel
 import json
 import sys
 from pprint import pprint
+from utilities import merge
 
 configFilePath = sys.argv[1]
 with open('default_parameters.json', 'rt') as file:
@@ -10,13 +11,12 @@ with open('default_parameters.json', 'rt') as file:
 with open(configFilePath, 'rt') as file:
     parameters = json.load(file)
 
-for k in defaultParameters:
-    if k not in parameters:
-        parameters[k] = defaultParameters[k]
+mergedParameters = defaultParameters
+merge(parameters, mergedParameters)
 
 print("Training model with the following parameters")
-pprint(parameters)
-model = PillRecognitionModel(parameters)
+pprint(mergedParameters)
+model = PillRecognitionModel(mergedParameters)
 model.trainModel()
 
 

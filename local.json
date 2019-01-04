@@ -1,18 +1,14 @@
 {
-    "batchSize": 4,
-    "minRotation": -45,
-    "maxRotation": 45,
-    "vectorSize": 512,
-    "firstPassEpochs": 20,
-    "secondPassEpochs": 5000,
-    "firstPassLearningRate": 1e-3,
-    "secondPassLearningRate": 1e-3,
-    "denseDropoutRate": 0.5,
-    "denseFirstLayerSizeMultiplier": 2,
-    "denseActivation": "softsign",
-    "finalActivation": "sigmoid",
-    "testingBatchSize": 64,
-    "numGPUs": 1,
-    "epochsBeforeAccuracyMeasurement": 2,
-    "datasetSizesToTest": [500, 1000, 1500]
+   "neuralNetwork": {
+     "batchSize": 4.0,
+     "epochs": 3
+   },
+  "datasetSizesToTest": [
+    200,
+    1000,
+    1500
+  ],
+  "numGPUs": 1,
+  "imageGenerationWorkers": 1,
+  "stepsPerEpoch": 50
 }

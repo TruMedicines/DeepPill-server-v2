@@ -1,15 +1,6 @@
 {
-    "batchSize": 32,
-    "minRotation": -45,
-    "maxRotation": 45,
-    "vectorSize": 512,
-    "firstPassEpochs": 20,
-    "secondPassEpochs": 5000,
-    "firstPassLearningRate": 1e-3,
-    "secondPassLearningRate": 1e-3,
-    "denseDropoutRate": 0.5,
-    "denseFirstLayerSizeMultiplier": 2,
-    "denseActivation": "softsign",
-    "finalActivation": "sigmoid",
-    "testingBatchSize": 64
+
+   "neuralNetwork": {
+                   "epochs": 1
+   }
 }

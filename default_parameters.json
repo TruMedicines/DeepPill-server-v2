@@ -1,26 +1,61 @@
 {
-    "stepsPerEpoch": 500,
-    "validationSteps": 50,
-    "maxQueueSize": 25,
-    "epochsBeforeAccuracyMeasurement": 2,
-    "startingWeights": null,
-    "trainFinalLayersFirst": false,
-    "testingPrintEvery": 250,
-    "datasetSizesToTest": [200, 1000, 5000],
-    "rotationsToTest": [5, 15, 25, 35, 45],
-    "numGPUs": -1,
-    "enableTensorboard": false,
+  "stepsPerEpoch": 50,
+  "validationSteps": 50,
+  "maxQueueSize": 25,
+  "epochsBeforeAccuracyMeasurement": 2,
+  "testingPrintEvery": 250,
+  "datasetSizesToTest": [
+    200,
+    1000,
+    5000
+  ],
+  "rotationsToTest": [
+    5,
+    15,
+    25,
+    35,
+    45
+  ],
+  "numGPUs": 1,
+  "enableTensorboard": false,
+  "imageGenerationWorkers": 3,
+   "lossFunction": {"negativeWeight": 1.0,
+                    "positiveWeight": 1.0,
+                    "transform": "logarithmic",
+                    "transformSumMode": "individual"},
+   "neuralNetwork": {"batchSize": 4.0,
+                   "core": "inceptionnet",
+                   "denseLayerMultiplier": 2,
+                   "dropoutRate": 0.5,
+                   "optimizer": {"$index": 3,
+                                 "learningRate": 1e-3,
+                                 "optimizerName": "adam"},
+                   "vectorSize": 512,
+                   "reduceLRPatience": 5,
+                   "reduceLRFactor": 0.75,
+                   "denseActivation": "softsign",
+                   "finalActivation": "sigmoid",
+                   "epochs": 10
+   },
+  "startingWeights": {
+    "weights": "none"
+  },
+  "augmentation": {
+    "gaussianNoise": 0.1,
+    "maxRotation": 90,
+    "piecewiseAffine": 0.02,
     "minScale": 0.9,
     "maxScale": 1.1,
     "minTranslate": -0.1,
     "maxTranslate": 0.1,
-    "piecewiseAffine": 0.02,
     "minGaussianBlur": 0,
     "maxGaussianBlur": 1,
     "minMotionBlur": 5,
     "maxMotionBlur": 11,
-    "gaussianNoiseStrength": 0.1,
-    "imageGenerationWorkers": 4,
-    "reduceLRPatience": 5,
-    "reduceLRFactor": 0.75
+    "rotationEasing": {
+      "$index": 0,
+      "easing": "epoch",
+      "rotationEasing": 7.0
+    }
+  }
 }
