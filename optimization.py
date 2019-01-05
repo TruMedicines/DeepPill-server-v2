@@ -15,7 +15,7 @@ def trainRound1Optimization(parameters):
     pprint(mergedParameters)
     model = PillRecognitionModel(mergedParameters)
     accuracy = model.trainModel()
-    return 1.0 - accuracy
+    return {"loss": 1.0 - accuracy, "status": "ok"}
 
 
 
