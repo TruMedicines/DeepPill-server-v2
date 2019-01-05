@@ -14,8 +14,9 @@
               "pretrainEpochs": {
                 "type": "number",
                 "min": 0,
-                "max": 100,
-                "scaling": "linear"
+                "max": 10,
+                "scaling": "linear",
+                "rounding": 1
               }
             }
           },
@@ -71,13 +72,14 @@
               "resnet",
               "inceptionnet",
               "mobilenet",
-              "nasnet"
+              "nasnetmobile",
+              "nasnetlarge"
             ]
           },
           "batchSize": {
             "type": "number",
             "min": 2,
-            "max": 24,
+            "max": 16,
             "rounding": 1
           },
           "denseLayerMultiplier": {
@@ -89,7 +91,8 @@
             "type": "number",
             "min": 128,
             "max": 4098,
-            "scaling": "logarithmic"
+            "scaling": "logarithmic",
+            "rounding": 1
           },
           "dropoutRate": {
             "type": "number",

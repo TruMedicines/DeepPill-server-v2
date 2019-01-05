@@ -1,4 +1,4 @@
-from keras.applications import MobileNetV2, InceptionV3, ResNet50, NASNetLarge
+from keras.applications import MobileNetV2, InceptionV3, ResNet50, NASNetMobile, NASNetLarge
 from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda, Concatenate
 from keras.models import Sequential, Model
 from keras.optimizers import Adam, Nadam, RMSprop, SGD
@@ -23,6 +23,7 @@ import sklearn.neighbors
 import json
 import sys
 import threading
+import time
 from pprint import pprint
 from generate_data import generatePillImage
 import math
@@ -31,6 +32,7 @@ import random
 import concurrent.futures
 import multiprocessing
 from tensorflow.python.client import device_lib
+from keras.backend.tensorflow_backend import set_session
 
 
 class PillRecognitionModel:
@@ -55,12 +57,19 @@ class PillRecognitionModel:
         self.testingBatchNumber = multiprocessing.Value('i', 0)
         self.testingBatchNumberLock = multiprocessing.Lock()
 
+        self.imageWidth = 224
+        self.imageHeight = 224
+
         self.testingBatchSize = int(parameters['neuralNetwork']['batchSize'] * 2)
         self.datasetSizesToTest = parameters['datasetSizesToTest']
         self.rotationsToTest = parameters['rotationsToTest']
         self.testingPrintEvery = parameters['testingPrintEvery']
         self.measurementImages = []
         self.measurementRotatedImages = {}
+
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        set_session(tf.Session(config=config))
 
         self.augmentation = iaa.Sequential([
             iaa.Affine(
@@ -86,19 +95,18 @@ class PillRecognitionModel:
             self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['maxRotation'])
 
         for n in range(parameters['imageGenerationWorkers']):
-            newThread = threading.Thread(target=self.imageGenerationThread, daemon=True)
+            newThread = threading.Thread(target=self.imageGenerationThread, daemon=False)
             newThread.start()
             self.imageGenerationThreads.append(newThread)
 
     def imageGenerationThread(self):
-        while True:
+        while threading.main_thread().isAlive():
             future = self.imageGenerationExecutor.submit(generatePillImage)
             image = future.result()
             with self.imageListLock:
                 self.generatedImages.append(image)
                 if len(self.generatedImages) >= self.maxImagesToGenerate:
                     del self.generatedImages[0]
-
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -129,9 +137,9 @@ class PillRecognitionModel:
             Returns:
             loss -- real number, value of the loss
             """
-            anchor = tf.convert_to_tensor(y_pred[:, 0:self.parameters['neuralNetwork']['vectorSize']])
-            positive = tf.convert_to_tensor(y_pred[:, self.parameters['neuralNetwork']['vectorSize']:self.parameters['neuralNetwork']['vectorSize']*2])
-            negative = tf.convert_to_tensor(y_pred[:, self.parameters['neuralNetwork']['vectorSize']*2:self.parameters['neuralNetwork']['vectorSize']*3])
+            anchor = tf.convert_to_tensor(y_pred[:, 0:int(self.parameters['neuralNetwork']['vectorSize'])])
+            positive = tf.convert_to_tensor(y_pred[:, int(self.parameters['neuralNetwork']['vectorSize']):int(self.parameters['neuralNetwork']['vectorSize'])*2])
+            negative = tf.convert_to_tensor(y_pred[:, int(self.parameters['neuralNetwork']['vectorSize'])*2:int(self.parameters['neuralNetwork']['vectorSize'])*3])
 
             pos_diff = tf.square(tf.subtract(anchor, positive))
             neg_diff = tf.square(tf.subtract(anchor, negative))
@@ -200,11 +208,21 @@ class PillRecognitionModel:
             inputs = []
             outputs = []
 
-            # Generate negatives as just separate images
+            anchors = []
+            negatives = []
+
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                anchor, negative = random.sample(range(len(self.generatedImages)), 2)
+                anchor, negative = random.sample(range(min(len(self.generatedImages), self.maxImagesToGenerate)), 2)
                 anchor = self.generatedImages[anchor]
                 negative = self.generatedImages[negative]
+
+                anchors.append(anchor)
+                negatives.append(negative)
+
+            # Augment the images
+            for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
+                anchor = anchors[n]
+                negative = negatives[n]
 
                 anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-self.currentMaxRotation.value/2, self.currentMaxRotation.value/2), mode='constant', cval=1)
                 positiveAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-self.currentMaxRotation.value/2, self.currentMaxRotation.value/2), mode='constant', cval=1)
@@ -215,8 +233,12 @@ class PillRecognitionModel:
                 positiveAugmented /= 255.0
                 negativeAugmented /= 255.0
 
+                anchorAugmented = skimage.transform.resize(anchorAugmented, (self.imageWidth, self.imageHeight, 3), mode='reflect', anti_aliasing=True)
+                positiveAugmented = skimage.transform.resize(positiveAugmented, (self.imageWidth, self.imageHeight, 3), mode='reflect', anti_aliasing=True)
+                negativeAugmented = skimage.transform.resize(negativeAugmented, (self.imageWidth, self.imageHeight, 3),  mode='reflect', anti_aliasing=True)
+
                 inputs.append(numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]))
-                outputs.append(numpy.ones(self.parameters['neuralNetwork']['vectorSize']) * 1.0)
+                outputs.append(numpy.ones(int(self.parameters['neuralNetwork']['vectorSize'])) * 1.0)
 
                 # plt.imshow(anchorAugmented, interpolation='lanczos')
                 # plt.savefig(f'example-{batchNumber}-{n}-anchor.png')
@@ -235,19 +257,23 @@ class PillRecognitionModel:
             primaryDevice = "/gpu:0"
 
         with tf.device(primaryDevice):
-            trainingPrimary = Input((3, 256, 256, 3))
-            predictPrimary = Input((256, 256, 3))
+            trainingPrimary = Input((3, self.imageWidth, self.imageHeight, 3))
+            predictPrimary = Input((self.imageWidth, self.imageHeight, 3))
 
             imageNet = Sequential()
             imageNetCore = None
             if self.parameters['neuralNetwork']['core'] == 'resnet':
-                imageNetCore = ResNet50(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+                imageNetCore = ResNet50(include_top=False, pooling='avg', input_shape=(self.imageWidth, self.imageHeight, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
             elif self.parameters['neuralNetwork']['core'] == 'inceptionnet':
-                imageNetCore = InceptionV3(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+                imageNetCore = InceptionV3(include_top=False, pooling='avg', input_shape=(self.imageWidth, self.imageHeight, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
             elif self.parameters['neuralNetwork']['core'] == 'mobilenet':
-                imageNetCore = MobileNetV2(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
-            elif self.parameters['neuralNetwork']['core'] == 'nasnet':
-                imageNetCore = NASNetLarge(include_top=False, pooling=None, input_shape=(256, 256, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+                imageNetCore = MobileNetV2(include_top=False, pooling='avg', input_shape=(self.imageWidth, self.imageHeight, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+            elif self.parameters['neuralNetwork']['core'] == 'nasnetmobile':
+                imageNetCore = NASNetMobile(include_top=False, pooling='avg', input_shape=(self.imageWidth, self.imageHeight, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+            elif self.parameters['neuralNetwork']['core'] == 'nasnetlarge':
+                imageNetCore = NASNetLarge(include_top=False, pooling='avg', input_shape=(self.imageWidth, self.imageHeight, 3), weights=('imagenet' if self.parameters['startingWeights']['weights'] == 'imagenet' else None))
+
+            imageNetCore.summary()
 
             imageNet.add(imageNetCore)
             imageNet.add(Reshape([-1]))
@@ -255,7 +281,9 @@ class PillRecognitionModel:
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
             imageNet.add(BatchNormalization())
-            imageNet.add(Dense(self.parameters['neuralNetwork']['vectorSize'], activation=self.parameters["neuralNetwork"]["finalActivation"]))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
+
+            imageNet.summary()
 
             encoded_anchor = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
             encoded_positive = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
@@ -281,11 +309,11 @@ class PillRecognitionModel:
 
         def epochCallback(epoch, logs):
             nonlocal bestAccuracy
-            predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
-
-            self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing']))) * self.parameters['augmentation']['maxRotation']
+            if self.parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
+                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing']))) * self.parameters['augmentation']['maxRotation']
 
             if epoch % self.parameters['epochsBeforeAccuracyMeasurement'] == (self.parameters['epochsBeforeAccuracyMeasurement']-1):
+                predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
                 accuracy = self.measureAccuracy(predictionModel)
                 if bestAccuracy is None or accuracy > bestAccuracy:
                     bestAccuracy = accuracy
@@ -389,7 +417,7 @@ class PillRecognitionModel:
                 futures = []
                 with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as worker:
                     for n in range(int(maxDatasetSize/10)):
-                        futures.append(worker.submit(globalGenerateTestImages, self.rotationsToTest))
+                        futures.append(worker.submit(globalGenerateTestImages, self.imageWidth, self.imageHeight, self.rotationsToTest))
 
                     for future in concurrent.futures.as_completed(futures):
                         self.measurementImages.append(future.result()[0])
@@ -482,7 +510,8 @@ class PillRecognitionModel:
         return meanAccuracy
 
 
-def globalGenerateTestImages(rotations):
+def globalGenerateTestImages(width, height, rotations):
     image = generatePillImage()
+    image = skimage.transform.resize(image, (width, height, 3), mode='reflect', anti_aliasing=True)
     rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
     return image, rotated

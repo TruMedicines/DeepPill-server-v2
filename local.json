@@ -1,13 +1,8 @@
 {
    "neuralNetwork": {
-     "batchSize": 4.0,
+     "batchSize": 16.0,
      "epochs": 3
    },
-  "datasetSizesToTest": [
-    200,
-    1000,
-    1500
-  ],
   "numGPUs": 1,
   "imageGenerationWorkers": 1,
   "stepsPerEpoch": 50

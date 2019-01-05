@@ -1,13 +1,13 @@
 {
-  "stepsPerEpoch": 50,
+  "stepsPerEpoch": 500,
   "validationSteps": 50,
   "maxQueueSize": 25,
   "epochsBeforeAccuracyMeasurement": 2,
   "testingPrintEvery": 250,
   "datasetSizesToTest": [
-    200,
-    1000,
-    5000
+    100,
+    250,
+    1000
   ],
   "rotationsToTest": [
     5,
@@ -18,11 +18,11 @@
   ],
   "numGPUs": 1,
   "enableTensorboard": false,
-  "imageGenerationWorkers": 3,
+  "imageGenerationWorkers": 2,
    "lossFunction": {"negativeWeight": 1.0,
                     "positiveWeight": 1.0,
                     "transform": "logarithmic",
-                    "transformSumMode": "individual"},
+                    "transformSumMode": "summed"},
    "neuralNetwork": {"batchSize": 4.0,
                    "core": "inceptionnet",
                    "denseLayerMultiplier": 2,
@@ -30,12 +30,12 @@
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
                                  "optimizerName": "adam"},
-                   "vectorSize": 512,
+                   "vectorSize": 4096,
                    "reduceLRPatience": 5,
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 10
+                   "epochs": 20
    },
   "startingWeights": {
     "weights": "none"
