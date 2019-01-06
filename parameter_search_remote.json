@@ -79,7 +79,7 @@
           "batchSize": {
             "type": "number",
             "min": 2,
-            "max": 16,
+            "max": 8,
             "rounding": 1
           },
           "denseLayerMultiplier": {
@@ -240,8 +240,11 @@
     "type": "remote",
     "command": "~/eb-pill-match/remote.sh",
     "hosts": [
+      "localhost",
+      "52.244.231.15",
       "52.244.231.165"
-    ]
+    ],
+    "parallel": 2
   },
   "search": {
     "method": "atpe",

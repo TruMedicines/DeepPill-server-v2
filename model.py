@@ -83,11 +83,16 @@ class PillRecognitionModel:
         ])
 
         self.maxImagesToGenerate = 1000
+        self.maxTripletsToGenerate = 1000
         self.imageGenerationManager = multiprocessing.Manager()
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
+        self.imageAugmentationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
         self.generatedImages = self.imageGenerationManager.list()
+        self.augmentedTriplets = self.imageGenerationManager.list()
         self.imageGenerationThreads = []
+        self.imageAugmentationThreads = []
         self.imageListLock = threading.Lock()
+        self.augmentedTripletListLock = threading.Lock()
 
         if parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
             self.currentMaxRotation = self.imageGenerationManager.Value('i', 0)
@@ -99,6 +104,13 @@ class PillRecognitionModel:
             newThread.start()
             self.imageGenerationThreads.append(newThread)
 
+        time.sleep(2)
+
+        for n in range(parameters['imageGenerationWorkers']):
+            newThread = threading.Thread(target=self.imageAugmentationThread, daemon=False)
+            newThread.start()
+            self.imageAugmentationThreads.append(newThread)
+
     def imageGenerationThread(self):
         while threading.main_thread().isAlive():
             future = self.imageGenerationExecutor.submit(generatePillImage)
@@ -107,6 +119,17 @@ class PillRecognitionModel:
                 self.generatedImages.append(image)
                 if len(self.generatedImages) >= self.maxImagesToGenerate:
                     del self.generatedImages[0]
+
+
+    def imageAugmentationThread(self):
+        while threading.main_thread().isAlive():
+            future = self.imageAugmentationExecutor.submit(globalGenerateSingleTriplet, self.generatedImages, self.maxImagesToGenerate, self.currentMaxRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
+            triplet = future.result()
+
+            with self.augmentedTripletListLock:
+                self.augmentedTriplets.append(triplet)
+                if len(self.augmentedTriplets) >= self.maxTripletsToGenerate:
+                    del self.augmentedTriplets[0]
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -192,62 +215,18 @@ class PillRecognitionModel:
 
     def generateBatch(self, testing=False):
         while True:
-            batchNumber = 0
-            if not testing:
-                with self.trainingBatchNumberLock:
-                    self.trainingBatchNumber.value += 1
-                    batchNumber = self.trainingBatchNumber.value
-            else:
-                with self.testingBatchNumberLock:
-                    self.testingBatchNumber.value += 1
-                    batchNumber = self.testingBatchNumber.value
-
-            # print(batchNumber, flush=True)
-
             # Generate half the batch as negative examples, half the batch as positive examples
             inputs = []
             outputs = []
 
-            anchors = []
-            negatives = []
-
-            for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                anchor, negative = random.sample(range(min(len(self.generatedImages), self.maxImagesToGenerate)), 2)
-                anchor = self.generatedImages[anchor]
-                negative = self.generatedImages[negative]
-
-                anchors.append(anchor)
-                negatives.append(negative)
+            triplets = random.sample(range(min(len(self.augmentedTriplets)-1, self.maxTripletsToGenerate-1)), int(self.parameters['neuralNetwork']['batchSize']))
 
             # Augment the images
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                anchor = anchors[n]
-                negative = negatives[n]
+                tripletInputs, tripletOutputs = self.augmentedTriplets[triplets[n]]
 
-                anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-self.currentMaxRotation.value/2, self.currentMaxRotation.value/2), mode='constant', cval=1)
-                positiveAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-self.currentMaxRotation.value/2, self.currentMaxRotation.value/2), mode='constant', cval=1)
-                negativeAugmented = skimage.transform.rotate(negative, angle=random.uniform(-self.currentMaxRotation.value/2, self.currentMaxRotation.value/2), mode='constant', cval=1)
-
-                anchorAugmented, positiveAugmented, negativeAugmented = self.augmentation.augment_images(numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]) * 255.0)
-                anchorAugmented /= 255.0
-                positiveAugmented /= 255.0
-                negativeAugmented /= 255.0
-
-                anchorAugmented = skimage.transform.resize(anchorAugmented, (self.imageWidth, self.imageHeight, 3), mode='reflect', anti_aliasing=True)
-                positiveAugmented = skimage.transform.resize(positiveAugmented, (self.imageWidth, self.imageHeight, 3), mode='reflect', anti_aliasing=True)
-                negativeAugmented = skimage.transform.resize(negativeAugmented, (self.imageWidth, self.imageHeight, 3),  mode='reflect', anti_aliasing=True)
-
-                inputs.append(numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]))
-                outputs.append(numpy.ones(int(self.parameters['neuralNetwork']['vectorSize'])) * 1.0)
-
-                # plt.imshow(anchorAugmented, interpolation='lanczos')
-                # plt.savefig(f'example-{batchNumber}-{n}-anchor.png')
-                #
-                # plt.imshow(positiveAugmented, interpolation='lanczos')
-                # plt.savefig(f'example-{batchNumber}-{n}-positive.png')
-                #
-                # plt.imshow(negativeAugmented, interpolation='lanczos')
-                # plt.savefig(f'example-{batchNumber}-{n}-negative.png')
+                inputs.append(tripletInputs)
+                outputs.append(tripletOutputs)
 
             yield numpy.array(inputs), numpy.array(outputs)
 
@@ -515,3 +494,35 @@ def globalGenerateTestImages(width, height, rotations):
     image = skimage.transform.resize(image, (width, height, 3), mode='reflect', anti_aliasing=True)
     rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
     return image, rotated
+
+def globalGenerateSingleTriplet(generatedImages, maxImagesToGenerate, currentMaxRotation, parameters, imageWidth, imageHeight, vectorSize):
+    augmentation =  iaa.Sequential([
+            iaa.Affine(
+                scale=(parameters["augmentation"]["minScale"], parameters["augmentation"]["maxScale"]),
+                translate_percent=(parameters["augmentation"]["minTranslate"], parameters["augmentation"]["maxTranslate"]),
+                cval=255),
+            iaa.PiecewiseAffine(parameters["augmentation"]["piecewiseAffine"]),
+            iaa.GaussianBlur(sigma=(parameters["augmentation"]["minGaussianBlur"], parameters["augmentation"]["maxGaussianBlur"])),
+            iaa.MotionBlur(k=(parameters["augmentation"]["minMotionBlur"], parameters["augmentation"]["maxMotionBlur"])),
+            iaa.AdditiveGaussianNoise(scale=parameters["augmentation"]["gaussianNoise"] * 255)
+        ])
+
+
+    anchor, negative = random.sample(range(min(len(generatedImages)-1, maxImagesToGenerate-1)), 2)
+    anchor = generatedImages[anchor]
+    negative = generatedImages[negative]
+
+    anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
+    positiveAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
+    negativeAugmented = skimage.transform.rotate(negative, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
+
+    anchorAugmented, positiveAugmented, negativeAugmented = augmentation.augment_images(numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]) * 255.0)
+    anchorAugmented /= 255.0
+    positiveAugmented /= 255.0
+    negativeAugmented /= 255.0
+
+    anchorAugmented = skimage.transform.resize(anchorAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
+    positiveAugmented = skimage.transform.resize(positiveAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
+    negativeAugmented = skimage.transform.resize(negativeAugmented, (imageWidth, imageHeight, 3),  mode='reflect', anti_aliasing=True)
+
+    return (numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]), numpy.ones(int(vectorSize)) * 1.0)
