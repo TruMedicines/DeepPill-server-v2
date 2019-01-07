@@ -121,7 +121,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -136,7 +136,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -151,7 +151,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -166,7 +166,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
