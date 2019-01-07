@@ -11,6 +11,9 @@ def trainRound1Optimization(parameters):
     mergedParameters = defaultParameters
     merge(parameters, mergedParameters)
 
+    if '$budget' in mergedParameters:
+        mergedParameters['neuralNetwork']['epochs'] = mergedParameters['$budget']
+
     print("Training model with the following parameters")
     pprint(mergedParameters)
     model = PillRecognitionModel(mergedParameters)

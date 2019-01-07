@@ -244,10 +244,13 @@
       "52.244.231.15",
       "52.244.231.165"
     ],
-    "parallel": 2
+    "parallel": 3
   },
   "search": {
-    "method": "atpe",
-    "iterations": 1000
+    "method": "abh",
+    "iterations": 1000,
+    "min_budget": 2,
+    "max_budget": 20,
+    "eta": 2
   }
 }
