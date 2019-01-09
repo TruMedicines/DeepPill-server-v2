@@ -1,8 +1,8 @@
 {
-  "stepsPerEpoch": 500,
-  "validationSteps": 50,
+  "stepsPerEpoch": 1000,
+  "validationSteps": 5,
   "maxQueueSize": 25,
-  "epochsBeforeAccuracyMeasurement": 2,
+  "epochsBeforeAccuracyMeasurement": 1,
   "testingPrintEvery": 250,
   "datasetSizesToTest": [
     100,
@@ -10,7 +10,6 @@
     1000
   ],
   "rotationsToTest": [
-    5,
     15,
     25,
     35,
@@ -30,7 +29,7 @@
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
                                  "optimizerName": "adam"},
-                   "vectorSize": 4096,
+                   "vectorSize": 512,
                    "reduceLRPatience": 5,
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",

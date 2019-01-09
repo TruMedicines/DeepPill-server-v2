@@ -12,7 +12,7 @@ def trainRound1Optimization(parameters):
     merge(parameters, mergedParameters)
 
     if '$budget' in mergedParameters:
-        mergedParameters['neuralNetwork']['epochs'] = int(mergedParameters['$budget']) + (int(mergedParameters['$budget']) % 2)
+        mergedParameters['neuralNetwork']['epochs'] = int(mergedParameters['$budget'])
 
     print("Training model with the following parameters")
     pprint(mergedParameters)

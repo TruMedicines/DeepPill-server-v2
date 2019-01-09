@@ -40,9 +40,13 @@ class PillRecognitionModel:
         self.parameters = parameters
 
         self.workers = int(psutil.cpu_count()*0.8)
-        self.pretrainEpochs = parameters['startingWeights'].get('pretrainEpochs', 0)
 
         self.trainFinalLayersFirst = (parameters['startingWeights']['weights'] == 'imagenet')
+        self.pretrainEpochs = int(parameters['startingWeights'].get('pretrainPercent', 0) * parameters['neuralNetwork']['epochs'])
+        if self.trainFinalLayersFirst:
+            self.epochs = parameters['neuralNetwork']['epochs'] - self.pretrainEpochs
+        else:
+            self.epochs = parameters['neuralNetwork']['epochs']
 
         self.enableTensorboard = parameters['enableTensorboard']
 
@@ -106,7 +110,7 @@ class PillRecognitionModel:
 
         time.sleep(2)
 
-        for n in range(parameters['imageGenerationWorkers']):
+        for n in range(parameters['imageGenerationWorkers']-1):
             newThread = threading.Thread(target=self.imageAugmentationThread, daemon=False)
             newThread.start()
             self.imageAugmentationThreads.append(newThread)
@@ -369,7 +373,7 @@ class PillRecognitionModel:
         trainingModel.fit_generator(
             generator=trainingGenerator,
             steps_per_epoch=self.parameters['stepsPerEpoch'],
-            epochs=self.parameters['neuralNetwork']['epochs'],
+            epochs=self.epochs,
             validation_data=testingGenerator,
             validation_steps=self.parameters['validationSteps'],
             workers=self.workers,

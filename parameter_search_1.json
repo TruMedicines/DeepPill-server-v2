@@ -79,7 +79,7 @@
           "batchSize": {
             "type": "number",
             "min": 2,
-            "max": 16,
+            "max": 8,
             "rounding": 1
           },
           "denseLayerMultiplier": {
@@ -121,7 +121,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -136,7 +136,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -151,7 +151,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -166,7 +166,7 @@
                   "learningRate": {
                     "type": "number",
                     "min": 1e-5,
-                    "max": 1e-3,
+                    "max": 5e-3,
                     "scaling": "logarithmic"
                   }
                 }
@@ -237,12 +237,20 @@
     "enabled": true
   },
   "function": {
-    "type": "python_function",
-    "module": "optimization",
-    "name": "trainRound1Optimization"
+    "type": "remote",
+    "command": "~/eb-pill-match/remote.sh",
+    "hosts": [
+      "localhost",
+      "52.244.231.15",
+      "52.244.231.165"
+    ],
+    "parallel": 3
   },
   "search": {
-    "method": "atpe",
-    "iterations": 1000
+    "method": "abh",
+    "iterations": 1000,
+    "min_budget": 1,
+    "max_budget": 20,
+    "eta": 2.7
   }
 }

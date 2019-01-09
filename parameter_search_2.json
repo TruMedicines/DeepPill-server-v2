@@ -3,33 +3,20 @@
     "type": "object",
     "properties": {
       "startingWeights": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "weights": {
-                "type": "string",
-                "constant": "imagenet"
-              },
-              "pretrainEpochs": {
-                "type": "number",
-                "min": 0,
-                "max": 10,
-                "scaling": "linear",
-                "rounding": 1
-              }
-            }
+        "type": "object",
+        "properties": {
+          "weights": {
+            "type": "string",
+            "constant": "imagenet"
           },
-          {
-            "type": "object",
-            "properties": {
-              "weights": {
-                "type": "string",
-                "constant": "none"
-              }
-            }
+          "pretrainPercent": {
+            "type": "number",
+            "min": 0,
+            "max": 1,
+            "scaling": "linear",
+            "rounding": 0.1
           }
-        ]
+        }
       },
       "lossFunction": {
         "type": "object",
@@ -69,30 +56,22 @@
           "core": {
             "type": "string",
             "enum": [
-              "resnet",
               "inceptionnet",
               "mobilenet",
-              "nasnetmobile",
-              "nasnetlarge"
+              "nasnetmobile"
             ]
-          },
-          "batchSize": {
-            "type": "number",
-            "min": 2,
-            "max": 8,
-            "rounding": 1
           },
           "denseLayerMultiplier": {
             "type": "number",
             "min": 0.8,
-            "max": 5.0
+            "max": 3.0
           },
           "vectorSize": {
             "type": "number",
             "min": 128,
-            "max": 4098,
+            "max": 1024,
             "scaling": "logarithmic",
-            "rounding": 1
+            "rounding": 16
           },
           "dropoutRate": {
             "type": "number",
@@ -106,7 +85,7 @@
           },
           "reduceLRPatience": {
             "type": "number",
-            "min": 3,
+            "min": 2,
             "max": 11
           },
           "optimizer": {
@@ -120,7 +99,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-5,
+                    "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   }
@@ -135,7 +114,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-5,
+                    "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   }
@@ -150,7 +129,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-5,
+                    "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   }
@@ -165,7 +144,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-5,
+                    "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   }
@@ -221,8 +200,8 @@
           },
           "gaussianNoise": {
             "type": "number",
-            "min": 0.0,
-            "max": 0.5,
+            "min": 0.1,
+            "max": 0.6,
             "scaling": "linear"
           }
         }
@@ -249,8 +228,9 @@
   "search": {
     "method": "abh",
     "iterations": 1000,
-    "min_budget": 2,
+    "min_budget": 1,
     "max_budget": 20,
-    "eta": 2
+    "eta": 2.7
   }
 }
+
