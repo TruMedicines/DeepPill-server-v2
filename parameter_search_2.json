@@ -102,6 +102,12 @@
                     "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 5e-6,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
                   }
                 }
               },
@@ -113,6 +119,12 @@
                     "constant": "nadam"
                   },
                   "learningRate": {
+                    "type": "number",
+                    "min": 5e-6,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
                     "type": "number",
                     "min": 5e-6,
                     "max": 5e-3,
@@ -132,6 +144,12 @@
                     "min": 5e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 5e-6,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
                   }
                 }
               },
@@ -143,6 +161,12 @@
                     "constant": "rmsprop"
                   },
                   "learningRate": {
+                    "type": "number",
+                    "min": 5e-6,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
                     "type": "number",
                     "min": 5e-6,
                     "max": 5e-3,

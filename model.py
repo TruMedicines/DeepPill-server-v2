@@ -328,13 +328,13 @@ class PillRecognitionModel:
             imageNet.layers[0].trainable = False
 
             if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
-                optimizer = Adam(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+                optimizer = Adam(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'nadam':
-                optimizer = Nadam(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+                optimizer = Nadam(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'rmsprop':
-                optimizer = RMSprop(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+                optimizer = RMSprop(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
-                optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+                optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
 
             trainingModel.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
 
