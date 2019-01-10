@@ -57,8 +57,7 @@
             "type": "string",
             "enum": [
               "inceptionnet",
-              "mobilenet",
-              "nasnetmobile"
+              "mobilenet"
             ]
           },
           "denseLayerMultiplier": {
