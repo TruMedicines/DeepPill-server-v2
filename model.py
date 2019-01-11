@@ -219,19 +219,19 @@ class PillRecognitionModel:
                                             if self.parameters['lossFunction']['transform'] == "linear":
                                                 pos_transformed = pos_diff
                                                 neg_transformed = 1.0 - neg_diff
-                                                pos_loss = tf.reduce_mean(pos_transformed, axis=1)
-                                                neg_loss = tf.reduce_mean(neg_transformed, axis=1)
+                                                pos_loss = tf.reduce_mean(pos_transformed)
+                                                neg_loss = tf.reduce_mean(neg_transformed)
                                                 loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
 
                                             elif self.parameters['lossFunction']['transform'] == "max":
                                                 # -ln(-x/N+1)
-                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + alpha, 0), axis=1)
+                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + alpha, 0))
                                             elif self.parameters['lossFunction']['transform'] == "logarithmic":
                                                 # -ln(-x/N+1)
                                                 pos_transformed = -tf.log(-pos_diff + 1 + epsilon)
                                                 neg_transformed = -tf.log(-(1.0 - neg_diff) + 1 + epsilon)
-                                                pos_loss = tf.reduce_mean(pos_transformed, axis=1)
-                                                neg_loss = tf.reduce_mean(neg_transformed, axis=1)
+                                                pos_loss = tf.reduce_mean(pos_transformed)
+                                                neg_loss = tf.reduce_mean(neg_transformed)
                                                 loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
 
                                         anchorLosses.append(loss)
