@@ -129,7 +129,7 @@ class PillRecognitionModel:
             if not self.running or self.measuringAccuracy:
                 time.sleep(0.6)
 
-            if (datetime.datetime.now() - self.startTime).total_seconds() > 7000:
+            if (datetime.datetime.now() - self.startTime).total_seconds() > 3600:
                 exit(1)
 
 

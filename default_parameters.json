@@ -23,7 +23,7 @@
                     "transform": "logarithmic",
                     "transformSumMode": "summed",
                     "batchMode": "hard"},
-   "neuralNetwork": {"batchSize": 8.0,
+   "neuralNetwork": {"batchSize": 4.0,
                    "augmentationsPerImage": 4,
                    "core": "inceptionnet",
                    "denseLayerMultiplier": 3,
