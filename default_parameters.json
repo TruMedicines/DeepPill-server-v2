@@ -22,14 +22,14 @@
                     "positiveWeight": 1.0,
                     "transform": "logarithmic",
                     "transformSumMode": "summed"},
-   "neuralNetwork": {"batchSize": 4.0,
+   "neuralNetwork": {"batchSize": 8.0,
                    "core": "inceptionnet",
-                   "denseLayerMultiplier": 2,
+                   "denseLayerMultiplier": 3,
                    "dropoutRate": 0.5,
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
                                  "optimizerName": "adam"},
-                   "vectorSize": 512,
+                   "vectorSize": 1024,
                    "reduceLRPatience": 5,
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
@@ -40,7 +40,7 @@
     "weights": "none"
   },
   "augmentation": {
-    "gaussianNoise": 0.1,
+    "gaussianNoise": 0.35,
     "maxRotation": 90,
     "piecewiseAffine": 0.02,
     "minScale": 0.9,
@@ -54,7 +54,7 @@
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",
-      "rotationEasing": 7.0
+      "rotationEasing": 0.35
     }
   }
 }

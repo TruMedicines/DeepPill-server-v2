@@ -293,7 +293,7 @@ class PillRecognitionModel:
         def epochCallback(epoch, logs):
             nonlocal bestAccuracy
             if self.parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
-                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing']))) * self.parameters['augmentation']['maxRotation']
+                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
 
             if epoch % self.parameters['epochsBeforeAccuracyMeasurement'] == (self.parameters['epochsBeforeAccuracyMeasurement']-1):
                 predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)

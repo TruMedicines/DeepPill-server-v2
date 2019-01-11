@@ -1,0 +1,236 @@
+{
+  "hyperparameters": {
+    "type": "object",
+    "properties": {
+      "startingWeights": {
+        "type": "object",
+        "properties": {
+          "weights": {
+            "type": "string",
+            "constant": "imagenet"
+          },
+          "pretrainPercent": {
+            "type": "number",
+            "min": 0,
+            "max": 0.5,
+            "scaling": "linear"
+          }
+        }
+      },
+      "lossFunction": {
+        "type": "object",
+        "properties": {
+          "positiveWeight": {
+            "type": "number",
+            "min": 0.9,
+            "max": 2.0,
+            "scaling": "linear"
+          },
+          "negativeWeight": {
+            "type": "number",
+            "min": 0.5,
+            "max": 1.1,
+            "scaling": "linear"
+          },
+          "transform": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "max",
+              "logarithmic"
+            ]
+          },
+          "transformSumMode": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "summed"
+            ]
+          }
+        }
+      },
+      "neuralNetwork": {
+        "type": "object",
+        "properties": {
+          "core": {
+            "type": "string",
+            "enum": [
+              "inceptionnet",
+              "mobilenet"
+            ]
+          },
+          "dropoutRate": {
+            "type": "number",
+            "min": 0.3,
+            "max": 0.8
+          },
+          "reduceLRFactor": {
+            "type": "number",
+            "min": 0.1,
+            "max": 0.8
+          },
+          "reduceLRPatience": {
+            "type": "number",
+            "min": 2,
+            "max": 11
+          },
+          "optimizer": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "adam"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 1e-5,
+                    "max": 5e-4,
+                    "scaling": "logarithmic"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "nadam"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 1e-5,
+                    "max": 5e-4,
+                    "scaling": "logarithmic"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "sgd"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 1e-5,
+                    "max": 5e-4,
+                    "scaling": "logarithmic"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "rmsprop"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "pretrainLearningRate": {
+                    "type": "number",
+                    "min": 1e-5,
+                    "max": 5e-4,
+                    "scaling": "logarithmic"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "augmentation": {
+        "type": "object",
+        "properties": {
+          "maxRotation": {
+            "type": "number",
+            "min": 20,
+            "max": 90,
+            "rounding": 1
+          },
+          "rotationEasing": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "easing": {
+                    "type": "string",
+                    "constant": "epoch"
+                  },
+                  "rotationEasing": {
+                    "type": "number",
+                    "min": 0,
+                    "max": 1,
+                    "scaling": "linear"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "easing": {
+                    "type": "string",
+                    "constant": "none"
+                  }
+                }
+              }
+            ]
+          },
+          "piecewiseAffine": {
+            "type": "number",
+            "min": 0,
+            "max": 0.05,
+            "scaling": "linear"
+          }
+        }
+      }
+    }
+  },
+  "results": {
+    "directory": "results",
+    "graphs": false
+  },
+  "ui": {
+    "enabled": true
+  },
+  "function": {
+    "type": "remote",
+    "command": "~/eb-pill-match/remote.sh",
+    "hosts": [
+      "localhost",
+      "52.244.231.15",
+      "52.244.231.165"
+    ],
+    "parallel": 3
+  },
+  "search": {
+    "method": "atpe",
+    "iterations": 1000
+  }
+}
+
