@@ -33,7 +33,7 @@ import concurrent.futures
 import multiprocessing
 from tensorflow.python.client import device_lib
 from keras.backend.tensorflow_backend import set_session
-
+import datetime
 
 class PillRecognitionModel:
     def __init__(self, parameters):
@@ -97,6 +97,9 @@ class PillRecognitionModel:
         self.imageAugmentationThreads = []
         self.imageListLock = threading.Lock()
         self.augmentedTripletListLock = threading.Lock()
+        self.running = False
+        self.measuringAccuracy = False
+        self.startTime = datetime.datetime.now()
 
         if parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
             self.currentMaxRotation = self.imageGenerationManager.Value('i', 0)
@@ -123,6 +126,11 @@ class PillRecognitionModel:
                 self.generatedImages.append(image)
                 if len(self.generatedImages) >= self.maxImagesToGenerate:
                     del self.generatedImages[0]
+            if not self.running or self.measuringAccuracy:
+                time.sleep(0.6)
+
+            if (datetime.datetime.now() - self.startTime).total_seconds() > 7000:
+                exit(1)
 
 
     def imageAugmentationThread(self):
@@ -134,6 +142,8 @@ class PillRecognitionModel:
                 self.augmentedTriplets.append(triplet)
                 if len(self.augmentedTriplets) >= self.maxTripletsToGenerate:
                     del self.augmentedTriplets[0]
+            if not self.running or self.measuringAccuracy:
+                time.sleep(0.3)
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -292,6 +302,7 @@ class PillRecognitionModel:
 
         def epochCallback(epoch, logs):
             nonlocal bestAccuracy
+            self.measuringAccuracy=True
             if self.parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
                 self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing']))) * self.parameters['augmentation']['maxRotation']
 
@@ -300,6 +311,7 @@ class PillRecognitionModel:
                 accuracy = self.measureAccuracy(predictionModel)
                 if bestAccuracy is None or accuracy > bestAccuracy:
                     bestAccuracy = accuracy
+            self.measuringAccuracy = False
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
 
@@ -340,6 +352,7 @@ class PillRecognitionModel:
 
             trainingModel.summary()
             trainingModel.count_params()
+            self.running = True
 
             trainingModel.fit_generator(
                 generator=trainingGenerator,
@@ -347,8 +360,8 @@ class PillRecognitionModel:
                 epochs=self.pretrainEpochs,
                 validation_data=testingGenerator,
                 validation_steps=self.parameters['validationSteps'],
-                workers=self.workers,
-                use_multiprocessing=True,
+                workers=1,
+                use_multiprocessing=False,
                 max_queue_size=self.parameters['maxQueueSize'],
                 callbacks=callbacks
             )
@@ -369,6 +382,7 @@ class PillRecognitionModel:
 
         trainingModel.summary()
         trainingModel.count_params()
+        self.running = True
 
         trainingModel.fit_generator(
             generator=trainingGenerator,
@@ -376,8 +390,8 @@ class PillRecognitionModel:
             epochs=self.epochs,
             validation_data=testingGenerator,
             validation_steps=self.parameters['validationSteps'],
-            workers=self.workers,
-            use_multiprocessing=True,
+            workers=1,
+            use_multiprocessing=False,
             max_queue_size=self.parameters['maxQueueSize'],
             callbacks=callbacks
         )
