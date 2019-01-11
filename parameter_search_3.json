@@ -46,6 +46,13 @@
               "individual",
               "summed"
             ]
+          },
+          "batchMode": {
+            "type": "string",
+            "enum": [
+              "hard",
+              "all"
+            ]
           }
         }
       },

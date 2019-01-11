@@ -1,6 +1,6 @@
 {
    "neuralNetwork": {
-     "batchSize": 16.0,
+     "batchSize": 8.0,
      "epochs": 3
    },
   "numGPUs": 1,

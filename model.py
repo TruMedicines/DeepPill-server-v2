@@ -174,57 +174,73 @@ class PillRecognitionModel:
             Returns:
             loss -- real number, value of the loss
             """
-            anchor = tf.convert_to_tensor(y_pred[:, 0:int(self.parameters['neuralNetwork']['vectorSize'])])
-            positive = tf.convert_to_tensor(y_pred[:, int(self.parameters['neuralNetwork']['vectorSize']):int(self.parameters['neuralNetwork']['vectorSize'])*2])
-            negative = tf.convert_to_tensor(y_pred[:, int(self.parameters['neuralNetwork']['vectorSize'])*2:int(self.parameters['neuralNetwork']['vectorSize'])*3])
+            losses = []
+            for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
+                for k in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+                    anchor = tf.convert_to_tensor(y_pred[n*self.parameters['neuralNetwork']['augmentationsPerImage'] + k])
 
-            pos_diff = tf.square(tf.subtract(anchor, positive))
-            neg_diff = tf.square(tf.subtract(anchor, negative))
+                    anchorLosses = []
+                    for d in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+                        if d != k:
+                            positive = tf.convert_to_tensor(y_pred[n*self.parameters['neuralNetwork']['augmentationsPerImage'] + d])
 
-            alpha = 0.2
+                            for j in range(int(self.parameters['neuralNetwork']['batchSize'])):
+                                if j != n:
+                                    for m in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+                                        negative = tf.convert_to_tensor(y_pred[j * self.parameters['neuralNetwork']['augmentationsPerImage'] + m])
 
-            if self.parameters['lossFunction']['transformSumMode'] == 'summed':
-                # distance between the anchor and the positive
-                pos_dist = tf.reduce_sum(pos_diff, 1)
-                # distance between the anchor and the negative
-                neg_dist = tf.reduce_sum(neg_diff, 1)
+                                        pos_diff = tf.square(tf.subtract(anchor, positive))
+                                        neg_diff = tf.square(tf.subtract(anchor, negative))
 
-                beta = self.parameters['neuralNetwork']['vectorSize'] + 1
+                                        alpha = 0.2
 
-                if self.parameters['lossFunction']['transform'] == "linear":
-                    pos_dist = tf.divide((pos_dist), beta)
-                    neg_dist = tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta)
-                elif self.parameters['lossFunction']['transform'] == "max":
-                    pos_dist = tf.divide((pos_dist), beta)
-                    neg_dist = tf.divide((neg_dist), beta)
-                    return tf.maximum(pos_dist - neg_dist + alpha, 0.0)
-                elif self.parameters['lossFunction']['transform'] == "logarithmic":
-                    pos_dist = -tf.log(-tf.divide((pos_dist), beta) + 1 + epsilon)
-                    neg_dist = -tf.log(-tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta) + 1 + epsilon)
+                                        loss = None
+                                        if self.parameters['lossFunction']['transformSumMode'] == 'summed':
+                                            # distance between the anchor and the positive
+                                            pos_dist = tf.reduce_sum(pos_diff)
+                                            # distance between the anchor and the negative
+                                            neg_dist = tf.reduce_sum(neg_diff)
 
-                # compute loss
-                loss = neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
+                                            beta = self.parameters['neuralNetwork']['vectorSize'] + 1
 
-                return loss
-            else:
-                if self.parameters['lossFunction']['transform'] == "linear":
-                    pos_transformed = pos_diff
-                    neg_transformed = 1.0 - neg_diff
-                elif self.parameters['lossFunction']['transform'] == "max":
-                    # -ln(-x/N+1)
-                    return tf.reduce_mean(tf.maximum(pos_diff - neg_diff + alpha, 0), axis=1)
-                elif self.parameters['lossFunction']['transform'] == "logarithmic":
-                    # -ln(-x/N+1)
-                    pos_transformed = -tf.log(-pos_diff + 1 + epsilon)
-                    neg_transformed = -tf.log(-(1.0 - neg_diff) + 1 + epsilon)
+                                            if self.parameters['lossFunction']['transform'] == "linear":
+                                                pos_dist = tf.divide((pos_dist), beta)
+                                                neg_dist = tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta)
+                                                loss = neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
+                                            elif self.parameters['lossFunction']['transform'] == "max":
+                                                pos_dist = tf.divide((pos_dist), beta)
+                                                neg_dist = tf.divide((neg_dist), beta)
+                                                loss = tf.maximum(pos_dist - neg_dist + alpha, 0.0)
+                                            elif self.parameters['lossFunction']['transform'] == "logarithmic":
+                                                pos_dist = -tf.log(-tf.divide((pos_dist), beta) + 1 + epsilon)
+                                                neg_dist = -tf.log(-tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta) + 1 + epsilon)
+                                                loss = neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
+                                        else:
+                                            if self.parameters['lossFunction']['transform'] == "linear":
+                                                pos_transformed = pos_diff
+                                                neg_transformed = 1.0 - neg_diff
+                                                pos_loss = tf.reduce_mean(pos_transformed, axis=1)
+                                                neg_loss = tf.reduce_mean(neg_transformed, axis=1)
+                                                loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
 
-                pos_loss = tf.reduce_mean(pos_transformed, axis=1)
-                neg_loss = tf.reduce_mean(neg_transformed, axis=1)
+                                            elif self.parameters['lossFunction']['transform'] == "max":
+                                                # -ln(-x/N+1)
+                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + alpha, 0), axis=1)
+                                            elif self.parameters['lossFunction']['transform'] == "logarithmic":
+                                                # -ln(-x/N+1)
+                                                pos_transformed = -tf.log(-pos_diff + 1 + epsilon)
+                                                neg_transformed = -tf.log(-(1.0 - neg_diff) + 1 + epsilon)
+                                                pos_loss = tf.reduce_mean(pos_transformed, axis=1)
+                                                neg_loss = tf.reduce_mean(neg_transformed, axis=1)
+                                                loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
 
-                loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
-
-                return loss
-
+                                        anchorLosses.append(loss)
+                    if self.parameters['lossFunction']['batchMode'] == 'hard':
+                        anchorLoss = tf.reduce_max(tf.stack(anchorLosses))
+                    elif self.parameters['lossFunction']['batchMode'] == 'all':
+                        anchorLoss = tf.reduce_mean(tf.stack(anchorLosses))
+                    losses.append(anchorLoss)
+            return tf.reduce_mean(tf.stack(anchorLosses))
         return triplet_loss
 
     def generateBatch(self, testing=False):
@@ -239,8 +255,9 @@ class PillRecognitionModel:
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
                 tripletInputs, tripletOutputs = self.augmentedTriplets[triplets[n]]
 
-                inputs.append(tripletInputs)
-                outputs.append(tripletOutputs)
+                for input in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+                    inputs.append(tripletInputs[input])
+                    outputs.append(tripletOutputs)
 
             yield numpy.array(inputs), numpy.array(outputs)
 
@@ -250,8 +267,7 @@ class PillRecognitionModel:
             primaryDevice = "/gpu:0"
 
         with tf.device(primaryDevice):
-            trainingPrimary = Input((3, self.imageWidth, self.imageHeight, 3))
-            predictPrimary = Input((self.imageWidth, self.imageHeight, 3))
+            input = Input((self.imageWidth, self.imageHeight, 3))
 
             imageNet = Sequential()
             imageNetCore = None
@@ -278,21 +294,13 @@ class PillRecognitionModel:
 
             imageNet.summary()
 
-            encoded_anchor = imageNet(Lambda(lambda x: x[:, 0])(trainingPrimary))
-            encoded_positive = imageNet(Lambda(lambda x: x[:, 1])(trainingPrimary))
-            encoded_negative = imageNet(Lambda(lambda x: x[:, 2])(trainingPrimary))
-
-            encoded_triplet = Concatenate(axis=1)([encoded_anchor, encoded_positive, encoded_negative])
-
-            encoded_predict = imageNet(predictPrimary)
+            encoded_predict = imageNet(input)
 
             # Create one model for training using triplet loss, and another model for live prediction
-            trainingModel = Model(inputs=[trainingPrimary], outputs=encoded_triplet)
-            predictionModel = Model(inputs=[predictPrimary], outputs=encoded_predict)
+            model = Model(inputs=[input], outputs=encoded_predict)
 
         if self.numGPUs > 1:
-            trainingModel = multi_gpu_model(trainingModel, gpus=self.numGPUs)
-            predictionModel = multi_gpu_model(predictionModel, gpus=self.numGPUs)
+            model = multi_gpu_model(model, gpus=self.numGPUs)
 
 
         testingGenerator = self.generateBatch(testing=True)
@@ -307,8 +315,7 @@ class PillRecognitionModel:
                 self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
 
             if epoch % self.parameters['epochsBeforeAccuracyMeasurement'] == (self.parameters['epochsBeforeAccuracyMeasurement']-1):
-                predictionModel.compile(loss="mean_squared_error", optimizer=optimizer)
-                accuracy = self.measureAccuracy(predictionModel)
+                accuracy = self.measureAccuracy(model)
                 if bestAccuracy is None or accuracy > bestAccuracy:
                     bestAccuracy = accuracy
             self.measuringAccuracy = False
@@ -348,13 +355,13 @@ class PillRecognitionModel:
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
                 optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
 
-            trainingModel.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
+            model.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
 
-            trainingModel.summary()
-            trainingModel.count_params()
+            model.summary()
+            model.count_params()
             self.running = True
 
-            trainingModel.fit_generator(
+            model.fit_generator(
                 generator=trainingGenerator,
                 steps_per_epoch=self.parameters['stepsPerEpoch'],
                 epochs=self.pretrainEpochs,
@@ -378,13 +385,13 @@ class PillRecognitionModel:
             optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
 
 
-        trainingModel.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
+        model.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
 
-        trainingModel.summary()
-        trainingModel.count_params()
+        model.summary()
+        model.count_params()
         self.running = True
 
-        trainingModel.fit_generator(
+        model.fit_generator(
             generator=trainingGenerator,
             steps_per_epoch=self.parameters['stepsPerEpoch'],
             epochs=self.epochs,
@@ -525,22 +532,15 @@ def globalGenerateSingleTriplet(generatedImages, maxImagesToGenerate, currentMax
             iaa.AdditiveGaussianNoise(scale=parameters["augmentation"]["gaussianNoise"] * 255)
         ])
 
-
-    anchor, negative = random.sample(range(min(len(generatedImages)-1, maxImagesToGenerate-1)), 2)
+    anchor = random.randint(0, min(len(generatedImages)-1, maxImagesToGenerate-1))
     anchor = generatedImages[anchor]
-    negative = generatedImages[negative]
 
-    anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
-    positiveAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
-    negativeAugmented = skimage.transform.rotate(negative, angle=random.uniform(-currentMaxRotation.value/2, currentMaxRotation.value/2), mode='constant', cval=1)
+    augmentations = []    
+    for n in range(parameters['neuralNetwork']['augmentationsPerImage']):
+        anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value / 2, currentMaxRotation.value / 2), mode='constant', cval=1)
+        anchorAugmented = augmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
+        anchorAugmented /= 255.0
+        anchorAugmented = skimage.transform.resize(anchorAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
+        augmentations.append(anchorAugmented)
 
-    anchorAugmented, positiveAugmented, negativeAugmented = augmentation.augment_images(numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]) * 255.0)
-    anchorAugmented /= 255.0
-    positiveAugmented /= 255.0
-    negativeAugmented /= 255.0
-
-    anchorAugmented = skimage.transform.resize(anchorAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
-    positiveAugmented = skimage.transform.resize(positiveAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
-    negativeAugmented = skimage.transform.resize(negativeAugmented, (imageWidth, imageHeight, 3),  mode='reflect', anti_aliasing=True)
-
-    return (numpy.array([anchorAugmented, positiveAugmented, negativeAugmented]), numpy.ones(int(vectorSize)) * 1.0)
+    return (numpy.array(augmentations), numpy.ones(int(vectorSize)) * 1.0)
