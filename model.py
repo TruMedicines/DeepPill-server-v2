@@ -41,8 +41,8 @@ class PillRecognitionModel:
 
         self.workers = int(psutil.cpu_count()*0.8)
 
-        self.trainFinalLayersFirst = (parameters['startingWeights']['weights'] == 'imagenet')
         self.pretrainEpochs = int(parameters['startingWeights'].get('pretrainPercent', 0) * parameters['neuralNetwork']['epochs'])
+        self.trainFinalLayersFirst = (parameters['startingWeights']['weights'] == 'imagenet') and self.pretrainEpochs > 0
         if self.trainFinalLayersFirst:
             self.epochs = parameters['neuralNetwork']['epochs'] - self.pretrainEpochs
         else:
@@ -87,14 +87,10 @@ class PillRecognitionModel:
         ])
 
         self.maxImagesToGenerate = 1000
-        self.maxTripletsToGenerate = 1000
         self.imageGenerationManager = multiprocessing.Manager()
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
-        self.imageAugmentationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
-        self.generatedImages = self.imageGenerationManager.list()
-        self.augmentedTriplets = self.imageGenerationManager.list()
+        self.augmentedImages = self.imageGenerationManager.list()
         self.imageGenerationThreads = []
-        self.imageAugmentationThreads = []
         self.imageListLock = threading.Lock()
         self.augmentedTripletListLock = threading.Lock()
         self.running = False
@@ -106,44 +102,24 @@ class PillRecognitionModel:
         else:
             self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['maxRotation'])
 
+        time.sleep(2)
+
         for n in range(parameters['imageGenerationWorkers']):
             newThread = threading.Thread(target=self.imageGenerationThread, daemon=False)
             newThread.start()
             self.imageGenerationThreads.append(newThread)
 
-        time.sleep(2)
-
-        for n in range(parameters['imageGenerationWorkers']-1):
-            newThread = threading.Thread(target=self.imageAugmentationThread, daemon=False)
-            newThread.start()
-            self.imageAugmentationThreads.append(newThread)
-
     def imageGenerationThread(self):
         while threading.main_thread().isAlive():
-            future = self.imageGenerationExecutor.submit(generatePillImage)
-            image = future.result()
-            with self.imageListLock:
-                self.generatedImages.append(image)
-                if len(self.generatedImages) >= self.maxImagesToGenerate:
-                    del self.generatedImages[0]
-            if not self.running or self.measuringAccuracy:
-                time.sleep(0.6)
-
-            if (datetime.datetime.now() - self.startTime).total_seconds() > 3600:
-                exit(1)
-
-
-    def imageAugmentationThread(self):
-        while threading.main_thread().isAlive():
-            future = self.imageAugmentationExecutor.submit(globalGenerateSingleTriplet, self.generatedImages, self.maxImagesToGenerate, self.currentMaxRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
+            future = self.imageGenerationExecutor.submit(globalGenerateSingleTriplet, self.currentMaxRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
             triplet = future.result()
 
             with self.augmentedTripletListLock:
-                self.augmentedTriplets.append(triplet)
-                if len(self.augmentedTriplets) >= self.maxTripletsToGenerate:
-                    del self.augmentedTriplets[0]
+                self.augmentedImages.append(triplet)
+                if len(self.augmentedImages) >= self.maxImagesToGenerate:
+                    del self.augmentedImages[0]
             if not self.running or self.measuringAccuracy:
-                time.sleep(0.3)
+                time.sleep(0.6)
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -192,7 +168,7 @@ class PillRecognitionModel:
                                         pos_diff = tf.square(tf.subtract(anchor, positive))
                                         neg_diff = tf.square(tf.subtract(anchor, negative))
 
-                                        alpha = 0.2
+                                        margin = 0.1
 
                                         loss = None
                                         if self.parameters['lossFunction']['transformSumMode'] == 'summed':
@@ -210,7 +186,7 @@ class PillRecognitionModel:
                                             elif self.parameters['lossFunction']['transform'] == "max":
                                                 pos_dist = tf.divide((pos_dist), beta)
                                                 neg_dist = tf.divide((neg_dist), beta)
-                                                loss = tf.maximum(pos_dist - neg_dist + alpha, 0.0)
+                                                loss = tf.maximum(pos_dist - neg_dist + margin, 0.0)
                                             elif self.parameters['lossFunction']['transform'] == "logarithmic":
                                                 pos_dist = -tf.log(-tf.divide((pos_dist), beta) + 1 + epsilon)
                                                 neg_dist = -tf.log(-tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta) + 1 + epsilon)
@@ -225,7 +201,7 @@ class PillRecognitionModel:
 
                                             elif self.parameters['lossFunction']['transform'] == "max":
                                                 # -ln(-x/N+1)
-                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + alpha, 0))
+                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + margin, 0))
                                             elif self.parameters['lossFunction']['transform'] == "logarithmic":
                                                 # -ln(-x/N+1)
                                                 pos_transformed = -tf.log(-pos_diff + 1 + epsilon)
@@ -249,11 +225,11 @@ class PillRecognitionModel:
             inputs = []
             outputs = []
 
-            triplets = random.sample(range(min(len(self.augmentedTriplets)-1, self.maxTripletsToGenerate-1)), int(self.parameters['neuralNetwork']['batchSize']))
+            triplets = random.sample(range(min(len(self.augmentedImages)-1, self.maxImagesToGenerate-1)), int(self.parameters['neuralNetwork']['batchSize']))
 
             # Augment the images
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                tripletInputs, tripletOutputs = self.augmentedTriplets[triplets[n]]
+                tripletInputs, tripletOutputs = self.augmentedImages[triplets[n]]
 
                 for input in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
                     inputs.append(tripletInputs[input])
@@ -320,7 +296,15 @@ class PillRecognitionModel:
                     bestAccuracy = accuracy
             self.measuringAccuracy = False
 
-        testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback)
+        rollingAverage9 = 0
+        rollingAverage99 = 0
+        def batchCallback(batch, log):
+            nonlocal rollingAverage9, rollingAverage99
+            rollingAverage9 = log['loss'] * 0.1 + rollingAverage9 * 0.9
+            rollingAverage99 = log['loss'] * 0.01 + rollingAverage99 * 0.99
+            print("  batch loss", log['loss'], "  rolling loss 0.9  ", rollingAverage9,  "  rolling loss 0.99", rollingAverage99)
+
+        testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback, on_batch_end=batchCallback)
 
         reduceLRCallback = ReduceLROnPlateau(monitor='loss', factor=self.parameters["neuralNetwork"]["reduceLRFactor"], patience=self.parameters["neuralNetwork"]["reduceLRPatience"], verbose=1)
 
@@ -520,7 +504,7 @@ def globalGenerateTestImages(width, height, rotations):
     rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
     return image, rotated
 
-def globalGenerateSingleTriplet(generatedImages, maxImagesToGenerate, currentMaxRotation, parameters, imageWidth, imageHeight, vectorSize):
+def globalGenerateSingleTriplet(currentMaxRotation, parameters, imageWidth, imageHeight, vectorSize):
     augmentation =  iaa.Sequential([
             iaa.Affine(
                 scale=(parameters["augmentation"]["minScale"], parameters["augmentation"]["maxScale"]),
@@ -532,8 +516,7 @@ def globalGenerateSingleTriplet(generatedImages, maxImagesToGenerate, currentMax
             iaa.AdditiveGaussianNoise(scale=parameters["augmentation"]["gaussianNoise"] * 255)
         ])
 
-    anchor = random.randint(0, min(len(generatedImages)-1, maxImagesToGenerate-1))
-    anchor = generatedImages[anchor]
+    anchor = generatePillImage()
 
     augmentations = []    
     for n in range(parameters['neuralNetwork']['augmentationsPerImage']):

@@ -1,6 +1,33 @@
 {
-
-   "neuralNetwork": {
-                   "epochs": 1
-   }
+  "augmentation": {
+    "gaussianNoise": 0.339835624747714,
+    "maxRotation": 40,
+    "piecewiseAffine": 0.006345186964944,
+    "rotationEasing": {
+      "easing": "none"
+    }
+  },
+  "lossFunction": {
+    "negativeWeight": 0.765364348171896,
+    "positiveWeight": 1.20514320989333,
+    "transform": "max",
+    "transformSumMode": "summed"
+  },
+  "neuralNetwork": {
+    "core": "inceptionnet",
+    "denseLayerMultiplier": 4.41838699378209,
+    "dropoutRate": 0.451472467407633,
+    "optimizer": {
+      "optimizerName": "rmsprop",
+      "learningRate": 0.000615659763457,
+      "pretrainLearningRate": 0.000615659763457
+    },
+    "reduceLRFactor": 0.170598057478657,
+    "reduceLRPatience": 3.54391821553777,
+    "vectorSize": 723
+  },
+  "startingWeights": {
+    "pretrainPercent": 0,
+    "weights": "imagenet"
+  }
 }

@@ -11,9 +11,7 @@
   ],
   "rotationsToTest": [
     15,
-    25,
-    35,
-    45
+    25
   ],
   "numGPUs": 1,
   "enableTensorboard": false,
@@ -23,20 +21,21 @@
                     "transform": "logarithmic",
                     "transformSumMode": "summed",
                     "batchMode": "hard"},
-   "neuralNetwork": {"batchSize": 4.0,
+   "neuralNetwork": {"batchSize": 16.0,
                    "augmentationsPerImage": 4,
                    "core": "inceptionnet",
                    "denseLayerMultiplier": 3,
                    "dropoutRate": 0.5,
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
+                                 "pretrainLearningRate": 1e-3,
                                  "optimizerName": "adam"},
                    "vectorSize": 1024,
                    "reduceLRPatience": 5,
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 10
+                   "epochs": 20
    },
   "startingWeights": {
     "weights": "none"
