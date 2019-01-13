@@ -7,11 +7,27 @@
   "datasetSizesToTest": [
     100,
     250,
-    1000
+    500,
+    750,
+    1000,
+    1250,
+    1500,
+    1750,
+    2000,
+    2250,
+    2500
   ],
   "rotationsToTest": [
+    1,
+    5,
+    10,
     15,
-    25
+    20,
+    25,
+    30,
+    35,
+    40,
+    45
   ],
   "numGPUs": 1,
   "enableTensorboard": false,
@@ -35,13 +51,14 @@
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 20
+                   "epochs": 100
    },
   "startingWeights": {
     "weights": "none"
   },
   "augmentation": {
     "gaussianNoise": 0.35,
+    "minRotation": 0,
     "maxRotation": 90,
     "piecewiseAffine": 0.02,
     "minScale": 0.9,
@@ -55,7 +72,8 @@
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",
-      "rotationEasing": 0.35
+      "minRotationEasing": 0.35,
+      "maxRotationEasing": 0.35
     }
   }
 }

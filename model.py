@@ -64,7 +64,7 @@ class PillRecognitionModel:
         self.imageWidth = 224
         self.imageHeight = 224
 
-        self.testingBatchSize = int(parameters['neuralNetwork']['batchSize'] * 2)
+        self.testingBatchSize = int(parameters['neuralNetwork']['batchSize'] * parameters['neuralNetwork']['augmentationsPerImage'])
         self.datasetSizesToTest = parameters['datasetSizesToTest']
         self.rotationsToTest = parameters['rotationsToTest']
         self.testingPrintEvery = parameters['testingPrintEvery']
@@ -98,8 +98,10 @@ class PillRecognitionModel:
         self.startTime = datetime.datetime.now()
 
         if parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
-            self.currentMaxRotation = self.imageGenerationManager.Value('i', 0)
+            self.currentMinRotation = self.imageGenerationManager.Value('i', 0)
+            self.currentMaxRotation = self.imageGenerationManager.Value('i', 1)
         else:
+            self.currentMinRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['minRotation'])
             self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['maxRotation'])
 
         time.sleep(2)
@@ -111,7 +113,7 @@ class PillRecognitionModel:
 
     def imageGenerationThread(self):
         while threading.main_thread().isAlive():
-            future = self.imageGenerationExecutor.submit(globalGenerateSingleTriplet, self.currentMaxRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
+            future = self.imageGenerationExecutor.submit(globalGenerateSingleTriplet, self.currentMaxRotation, self.currentMinRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
             triplet = future.result()
 
             with self.augmentedTripletListLock:
@@ -119,7 +121,7 @@ class PillRecognitionModel:
                 if len(self.augmentedImages) >= self.maxImagesToGenerate:
                     del self.augmentedImages[0]
             if not self.running or self.measuringAccuracy:
-                time.sleep(0.6)
+                time.sleep(1.0)
 
     def get_available_gpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -168,7 +170,7 @@ class PillRecognitionModel:
                                         pos_diff = tf.square(tf.subtract(anchor, positive))
                                         neg_diff = tf.square(tf.subtract(anchor, negative))
 
-                                        margin = 0.1
+                                        margin = 0.2
 
                                         loss = None
                                         if self.parameters['lossFunction']['transformSumMode'] == 'summed':
@@ -181,8 +183,8 @@ class PillRecognitionModel:
 
                                             if self.parameters['lossFunction']['transform'] == "linear":
                                                 pos_dist = tf.divide((pos_dist), beta)
-                                                neg_dist = tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta)
-                                                loss = neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
+                                                neg_dist = tf.divide((neg_dist), beta)
+                                                loss = -neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
                                             elif self.parameters['lossFunction']['transform'] == "max":
                                                 pos_dist = tf.divide((pos_dist), beta)
                                                 neg_dist = tf.divide((neg_dist), beta)
@@ -216,7 +218,17 @@ class PillRecognitionModel:
                     elif self.parameters['lossFunction']['batchMode'] == 'all':
                         anchorLoss = tf.reduce_mean(tf.stack(anchorLosses))
                     losses.append(anchorLoss)
-            return tf.reduce_mean(tf.stack(anchorLosses))
+
+            anchorLosses = tf.stack(anchorLosses)
+            nonZeroEntries = tf.boolean_mask(anchorLosses, tf.not_equal(anchorLosses, tf.zeros_like(anchorLosses)))  # [0, 2]
+
+            is_empty = tf.equal(tf.size(nonZeroEntries), 0)
+
+            loss = tf.cond( is_empty,
+                            lambda: tf.constant(0, tf.float32),
+                            lambda: tf.reduce_mean(anchorLosses))
+
+            return  loss
         return triplet_loss
 
     def generateBatch(self, testing=False):
@@ -288,7 +300,8 @@ class PillRecognitionModel:
             nonlocal bestAccuracy
             self.measuringAccuracy=True
             if self.parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
-                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['rotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
+                self.currentMinRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['minRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['minRotation']
+                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
 
             if epoch % self.parameters['epochsBeforeAccuracyMeasurement'] == (self.parameters['epochsBeforeAccuracyMeasurement']-1):
                 accuracy = self.measureAccuracy(model)
@@ -296,10 +309,14 @@ class PillRecognitionModel:
                     bestAccuracy = accuracy
             self.measuringAccuracy = False
 
-        rollingAverage9 = 0
-        rollingAverage99 = 0
+        rollingAverage9 = None
+        rollingAverage99 = None
         def batchCallback(batch, log):
             nonlocal rollingAverage9, rollingAverage99
+            if rollingAverage9 is None:
+                rollingAverage9 = log['loss']
+                rollingAverage99 = log['loss']
+
             rollingAverage9 = log['loss'] * 0.1 + rollingAverage9 * 0.9
             rollingAverage99 = log['loss'] * 0.01 + rollingAverage99 * 0.99
             print("  batch loss", log['loss'], "  rolling loss 0.9  ", rollingAverage9,  "  rolling loss 0.99", rollingAverage99)
@@ -449,14 +466,14 @@ class PillRecognitionModel:
                             print(f"        Completed vectors for {len(originalVectors[rotation])} samples", flush=True)
 
         print("    Measuring Final Accuracy", flush=True)
-        allAccuracies = []
+        top1Accuracies = []
         accuracyRows = []
         for rotation in self.rotationsToTest:
             if len(originalVectors[rotation]) == 0:
                 print(f"        Error! Unable to measure accuracy for rotation {rotation}. All samples had bad vectors.", flush=True)
                 continue
 
-            sizeAccuracies = {
+            accuracyInfo = {
                 "rot": rotation
             }
 
@@ -469,33 +486,40 @@ class PillRecognitionModel:
                 rotatedVectorsForTest = [rotatedVectors[rotation][index] for index in vectorIndexes]
 
                 print(f"            Fitting the nearest neighbor model on {len(origVectorsForTest)} samples", flush=True)
-                nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=1)
+                nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=5)
                 nearestNeighborModel.fit(origVectorsForTest)
 
                 print(f"            Computing results of nearest neighbors model on rotated images.", flush=True)
                 distance, indices = nearestNeighborModel.kneighbors(rotatedVectorsForTest)
 
-                correct = 0
+                correct = {topk: 0 for topk in range(1, 6)}
                 for n in range(len(origVectorsForTest)):
-                    if indices[n] == n:
-                        correct += 1
+                    for topk in range(1, 6):
+                        for k in range(0, topk):
+                            if indices[n][k] == n:
+                                correct[topk] += 1
+                                break
 
-                accuracy = float(correct) / float(len(origVectorsForTest))
-                print(f"            Nearest Neighbor Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
-                allAccuracies.append(accuracy)
-                sizeAccuracies[f's_{str(datasetSize)}'] = accuracy
-            accuracyRows.append(sizeAccuracies)
+                for topk in range(1, 6):
+                    accuracy = float(correct[topk]) / float(len(origVectorsForTest))
+                    print(f"            Nearest Neighbor Top-{topk} Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
+                    accuracyInfo[f's_{str(datasetSize)} t_{topk}'] = accuracy
 
-        if len(allAccuracies) == 0:
+                    if topk == 1:
+                        top1Accuracies.append(accuracy)
+
+            accuracyRows.append(accuracyInfo)
+
+        if len(top1Accuracies) == 0:
             return 0
 
         writer = csv.DictWriter(sys.stdout, fieldnames=list(accuracyRows[0].keys()), dialect=csv.excel_tab)
         writer.writeheader()
         writer.writerows(accuracyRows)
         print("")
-        meanAccuracy = numpy.mean(allAccuracies)
-        print(f"    Final Mean Accuracy {meanAccuracy}", flush=True)
-        return meanAccuracy
+        meanTop1Accuracy = numpy.mean(top1Accuracies)
+        print(f"    Final Mean Top-1 Accuracy {meanTop1Accuracy}", flush=True)
+        return meanTop1Accuracy
 
 
 def globalGenerateTestImages(width, height, rotations):
@@ -504,7 +528,7 @@ def globalGenerateTestImages(width, height, rotations):
     rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
     return image, rotated
 
-def globalGenerateSingleTriplet(currentMaxRotation, parameters, imageWidth, imageHeight, vectorSize):
+def globalGenerateSingleTriplet(currentMaxRotation, currentMinRotation, parameters, imageWidth, imageHeight, vectorSize):
     augmentation =  iaa.Sequential([
             iaa.Affine(
                 scale=(parameters["augmentation"]["minScale"], parameters["augmentation"]["maxScale"]),
@@ -520,7 +544,8 @@ def globalGenerateSingleTriplet(currentMaxRotation, parameters, imageWidth, imag
 
     augmentations = []    
     for n in range(parameters['neuralNetwork']['augmentationsPerImage']):
-        anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(-currentMaxRotation.value / 2, currentMaxRotation.value / 2), mode='constant', cval=1)
+        rotationDirection = random.choice([-1, +1])
+        anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(currentMinRotation.value/2, currentMaxRotation.value/2) * rotationDirection, mode='constant', cval=1)
         anchorAugmented = augmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
         anchorAugmented /= 255.0
         anchorAugmented = skimage.transform.resize(anchorAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)

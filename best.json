@@ -1,10 +1,13 @@
 {
   "augmentation": {
     "gaussianNoise": 0.339835624747714,
-    "maxRotation": 40,
+    "minRotation": 25,
+    "maxRotation": 50,
     "piecewiseAffine": 0.006345186964944,
     "rotationEasing": {
-      "easing": "none"
+      "easing": "epoch",
+      "minRotationEasing": 75,
+      "maxRotationEasing": 1
     }
   },
   "lossFunction": {
