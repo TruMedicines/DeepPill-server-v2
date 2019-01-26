@@ -6,8 +6,8 @@
     "piecewiseAffine": 0.006345186964944,
     "rotationEasing": {
       "easing": "epoch",
-      "minRotationEasing": 0.30,
-      "maxRotationEasing": 0.01
+      "minRotationEasing": 0.030,
+      "maxRotationEasing": 0.001
     }
   },
   "neuralNetwork": {

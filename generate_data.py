@@ -17,18 +17,6 @@ import matplotlib.pyplot as plt
 
 import cv2
 
-textures = []
-
-dirs = os.listdir('Pixar 130 Library')
-for dir in dirs:
-    if 'DS_Store' not in dir:
-        files = os.listdir(f'Pixar 130 Library/{dir}')
-        for file in files:
-            if '_Normal' not in file and '_Roughness' not in file and '.DS_Store' not in file:
-                image = skimage.io.imread(f'Pixar 130 Library/{dir}/{file}')
-
-                image = skimage.transform.resize(image, (256, 256))
-                textures.append(image)
 
 
 def generate_perlin_noise_2d(shape, res):
@@ -118,9 +106,6 @@ def cropCircle(imageData):
 
     out = imageData * mask
 
-    # randomTexture = random.choice(textures)
-    # white = randomTexture * (1.0 - mask)
-
     white = 1.0 * (1.0 - mask)
 
     imageData = out + white
@@ -135,9 +120,9 @@ def generatePillImage():
 
     np.random.seed(int(time.time() * 1000) % (2 ** 30))
     splotchMaskPattern = generate_perlin_noise_2d((splotchPatternWidth, splotchPatternHeight), (16, 16))
-    # rectanglePattern = generateRandomRectangles((splotchPatternWidth, splotchPatternHeight))
-    # splotchMaskPattern = np.maximum(splotchMaskPattern*0.8, rectanglePattern)
-    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.35, copy=False)
+    rectanglePattern = generateRandomRectangles((splotchPatternWidth, splotchPatternHeight))
+    splotchMaskPattern = np.maximum(splotchMaskPattern*0.8, rectanglePattern)
+    splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.40, copy=False)
 
     # splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
     # splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.60, copy=False)

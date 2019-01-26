@@ -15,6 +15,7 @@ from scipy.misc import imsave, imread
 import os
 import sklearn.metrics
 import numpy
+import textures
 import pickle
 import psutil
 import matplotlib.pyplot as plt
@@ -98,10 +99,12 @@ class PillRecognitionModel:
         self.running = False
         self.measuringAccuracy = False
         self.startTime = datetime.datetime.now()
+        self.imageId = 0
 
         if parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
             self.currentMinRotation = self.imageGenerationManager.Value('i', 0)
             self.currentMaxRotation = self.imageGenerationManager.Value('i', 1)
+            self.updateRotationValues(0)
         else:
             self.currentMinRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['minRotation'])
             self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['augmentation']['maxRotation'])
@@ -114,7 +117,10 @@ class PillRecognitionModel:
 
     def imageGenerationThread(self):
         while threading.main_thread().isAlive():
-            future = self.imageGenerationExecutor.submit(globalGenerateSingleTriplet, self.currentMaxRotation, self.currentMinRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'])
+            imageId = self.imageId
+            self.imageId += 1
+
+            future = self.imageGenerationExecutor.submit(globalGenerateSingleTriplet, self.currentMaxRotation, self.currentMinRotation, self.parameters, self.imageWidth, self.imageHeight, self.parameters['neuralNetwork']['vectorSize'], imageId)
             triplet = future.result()
 
             with self.augmentedTripletListLock:
@@ -262,6 +268,12 @@ class PillRecognitionModel:
         
         return model, imageNet
 
+    def updateRotationValues(self, epoch):
+        self.currentMinRotation.value = min(1.0, float(epoch+1) / float(
+            (self.parameters['augmentation']['rotationEasing']['minRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['minRotation']
+        self.currentMaxRotation.value = min(1.0, float(epoch+1) / float(
+            (self.parameters['augmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
+
     def trainModel(self):
         for thread in self.imageGenerationThreads:
             thread.start()
@@ -277,8 +289,7 @@ class PillRecognitionModel:
             nonlocal bestAccuracy
             self.measuringAccuracy=True
             if self.parameters['augmentation']['rotationEasing']['easing'] == 'epoch':
-                self.currentMinRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['minRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['minRotation']
-                self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
+                self.updateRotationValues(epoch)
 
             if epoch % 5 == 0:
                 imageNet.save(f"model-epoch-{epoch}.h5")
@@ -323,7 +334,7 @@ class PillRecognitionModel:
         callbacks = [testNearestNeighbor, learningRateScheduler]
         optimizer = None
 
-        imageNet.load_weights('model-current-weights.h5')
+        # imageNet.load_weights('model-current-weights.h5')
 
         if self.enableTensorboard:
             tensorBoardCallback = TensorBoard(
@@ -645,15 +656,18 @@ def globalGenerateFinalTestImage(width, height, parameters, imageId, dir):
 
 
 
-def globalGenerateSingleTriplet(currentMaxRotation, currentMinRotation, parameters, imageWidth, imageHeight, vectorSize):
-    augmentation =  iaa.Sequential([
+def globalGenerateSingleTriplet(currentMaxRotation, currentMinRotation, parameters, imageWidth, imageHeight, vectorSize, imageId):
+    mainAugmentation =  iaa.Sequential([
             iaa.Affine(
                 scale=(parameters["augmentation"]["minScale"], parameters["augmentation"]["maxScale"]),
                 translate_percent=(parameters["augmentation"]["minTranslate"], parameters["augmentation"]["maxTranslate"]),
                 cval=255),
             iaa.PiecewiseAffine(parameters["augmentation"]["piecewiseAffine"]),
             iaa.GaussianBlur(sigma=(parameters["augmentation"]["minGaussianBlur"], parameters["augmentation"]["maxGaussianBlur"])),
-            iaa.MotionBlur(k=(parameters["augmentation"]["minMotionBlur"], parameters["augmentation"]["maxMotionBlur"])),
+            iaa.MotionBlur(k=(parameters["augmentation"]["minMotionBlur"], parameters["augmentation"]["maxMotionBlur"]))
+        ])
+
+    noiseAugmentation =  iaa.Sequential([
             iaa.AdditiveGaussianNoise(scale=parameters["augmentation"]["gaussianNoise"] * 255)
         ])
 
@@ -663,8 +677,18 @@ def globalGenerateSingleTriplet(currentMaxRotation, currentMinRotation, paramete
     for n in range(parameters['neuralNetwork']['augmentationsPerImage']):
         rotationDirection = random.choice([-1, +1])
         anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(currentMinRotation.value/2, currentMaxRotation.value/2) * rotationDirection, mode='constant', cval=1)
-        anchorAugmented = augmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
+        anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
+        anchorAugmented = anchorAugmented / 255.0
+
+        anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
+        anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
+
+        anchorAugmented = noiseAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
         anchorAugmented /= 255.0
+
+        randomTexture = random.choice(textures.textures)
+        anchorAugmented = anchorWhiteMask * randomTexture + (1.0 - anchorWhiteMask) * anchorAugmented
+
         anchorAugmented = skimage.transform.resize(anchorAugmented, (imageWidth, imageHeight, 3), mode='reflect', anti_aliasing=True)
         augmentations.append(anchorAugmented)
 
