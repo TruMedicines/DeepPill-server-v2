@@ -25,7 +25,7 @@
     35,
     45
   ],
-  "numGPUs": 1,
+  "numGPUs": -1,
   "enableTensorboard": false,
   "imageGenerationWorkers": 2,
    "neuralNetwork": {"batchSize": 16.0,

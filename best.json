@@ -20,7 +20,7 @@
       "learningRateDecay": 0.95,
       "pretrainLearningRate": 0.000615659763457
     },
-    "vectorSize": 723
+    "vectorSize": 1024
   },
   "startingWeights": {
     "pretrainPercent": 0,

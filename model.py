@@ -187,7 +187,7 @@ class PillRecognitionModel:
                     worstPosDist = tf.reduce_max(tf.stack(posDists))
                     worstNegDist = tf.reduce_min(tf.stack(negDists))
 
-                    margin = 0.3
+                    margin = 1.0
 
                     pos_dist = tf.divide((worstPosDist), self.parameters['neuralNetwork']['vectorSize'])
                     neg_dist = tf.divide((worstNegDist), self.parameters['neuralNetwork']['vectorSize'])
@@ -256,8 +256,8 @@ class PillRecognitionModel:
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
             imageNet.add(BatchNormalization())
-            # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
+            # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
 
