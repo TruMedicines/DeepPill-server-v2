@@ -6,15 +6,9 @@
     "piecewiseAffine": 0.006345186964944,
     "rotationEasing": {
       "easing": "epoch",
-      "minRotationEasing": 75,
-      "maxRotationEasing": 1
+      "minRotationEasing": 0.30,
+      "maxRotationEasing": 0.01
     }
-  },
-  "lossFunction": {
-    "negativeWeight": 0.765364348171896,
-    "positiveWeight": 1.20514320989333,
-    "transform": "max",
-    "transformSumMode": "summed"
   },
   "neuralNetwork": {
     "core": "inceptionnet",
@@ -25,8 +19,8 @@
       "learningRate": 0.000615659763457,
       "pretrainLearningRate": 0.000615659763457
     },
-    "reduceLRFactor": 0.170598057478657,
-    "reduceLRPatience": 3.54391821553777,
+    "reduceLRFactor": 0.2,
+    "reduceLRPatience": 4,
     "vectorSize": 723
   },
   "startingWeights": {

@@ -1,5 +1,5 @@
 from keras.applications import MobileNetV2, InceptionV3, ResNet50, NASNetMobile, NASNetLarge
-from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, merge, Flatten, Subtract, Lambda, Concatenate
+from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, Flatten, Subtract, Lambda, Concatenate
 from keras.models import Sequential, Model
 from keras.optimizers import Adam, Nadam, RMSprop, SGD
 from keras.callbacks import LambdaCallback, TensorBoard, ReduceLROnPlateau
@@ -51,7 +51,7 @@ class PillRecognitionModel:
         self.enableTensorboard = parameters['enableTensorboard']
 
         if parameters['numGPUs'] == -1:
-            self.numGPUs = len(self.get_available_gpus())
+            self.numGPUs = len(self.getAvailableGpus())
         else:
             self.numGPUs = parameters['numGPUs']
 
@@ -86,7 +86,7 @@ class PillRecognitionModel:
             iaa.AdditiveGaussianNoise(scale=parameters["augmentation"]["gaussianNoise"] * 255)
         ])
 
-        self.maxImagesToGenerate = 1000
+        self.maxImagesToGenerate = 100
         self.imageGenerationManager = multiprocessing.Manager()
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
         self.augmentedImages = self.imageGenerationManager.list()
@@ -123,11 +123,11 @@ class PillRecognitionModel:
             if not self.running or self.measuringAccuracy:
                 time.sleep(1.0)
 
-    def get_available_gpus(self):
+    def getAvailableGpus(self):
         local_device_protos = device_lib.list_local_devices()
         return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
-    def create_triplet_loss(self):
+    def createTripletLoss(self):
         """
         :param log_loss: Whether or not the loss should be passed through a log function
         :param sum_loss: Whether the loss function should be applied seperately to each vector, or to the sum of the whole vector
@@ -157,76 +157,45 @@ class PillRecognitionModel:
                 for k in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
                     anchor = tf.convert_to_tensor(y_pred[n*self.parameters['neuralNetwork']['augmentationsPerImage'] + k])
 
-                    anchorLosses = []
+                    posDists = []
+                    negDists = []
+
                     for d in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
                         if d != k:
                             positive = tf.convert_to_tensor(y_pred[n*self.parameters['neuralNetwork']['augmentationsPerImage'] + d])
+                            pos_diff = tf.square(tf.subtract(anchor, positive))
+                            # distance between the anchor and the positive
+                            pos_dist = tf.reduce_sum(pos_diff)
+                            posDists.append(pos_dist)
 
-                            for j in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                                if j != n:
-                                    for m in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
-                                        negative = tf.convert_to_tensor(y_pred[j * self.parameters['neuralNetwork']['augmentationsPerImage'] + m])
+                    for j in range(int(self.parameters['neuralNetwork']['batchSize'])):
+                        if j != n:
+                            for m in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+                                negative = tf.convert_to_tensor(y_pred[j * self.parameters['neuralNetwork']['augmentationsPerImage'] + m])
+                                neg_diff = tf.square(tf.subtract(anchor, negative))
+                                # distance between the anchor and the negative
+                                neg_dist = tf.reduce_sum(neg_diff)
+                                negDists.append(neg_dist)
 
-                                        pos_diff = tf.square(tf.subtract(anchor, positive))
-                                        neg_diff = tf.square(tf.subtract(anchor, negative))
+                    worstPosDist = tf.reduce_max(tf.stack(posDists))
+                    worstNegDist = tf.reduce_min(tf.stack(negDists))
 
-                                        margin = 0.2
+                    margin = 0.3
 
-                                        loss = None
-                                        if self.parameters['lossFunction']['transformSumMode'] == 'summed':
-                                            # distance between the anchor and the positive
-                                            pos_dist = tf.reduce_sum(pos_diff)
-                                            # distance between the anchor and the negative
-                                            neg_dist = tf.reduce_sum(neg_diff)
+                    pos_dist = tf.divide((worstPosDist), self.parameters['neuralNetwork']['vectorSize'])
+                    neg_dist = tf.divide((worstNegDist), self.parameters['neuralNetwork']['vectorSize'])
+                    loss = tf.maximum(pos_dist - neg_dist + margin, 0.0)
 
-                                            beta = self.parameters['neuralNetwork']['vectorSize'] + 1
+                    losses.append(loss)
 
-                                            if self.parameters['lossFunction']['transform'] == "linear":
-                                                pos_dist = tf.divide((pos_dist), beta)
-                                                neg_dist = tf.divide((neg_dist), beta)
-                                                loss = -neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
-                                            elif self.parameters['lossFunction']['transform'] == "max":
-                                                pos_dist = tf.divide((pos_dist), beta)
-                                                neg_dist = tf.divide((neg_dist), beta)
-                                                loss = tf.maximum(pos_dist - neg_dist + margin, 0.0)
-                                            elif self.parameters['lossFunction']['transform'] == "logarithmic":
-                                                pos_dist = -tf.log(-tf.divide((pos_dist), beta) + 1 + epsilon)
-                                                neg_dist = -tf.log(-tf.divide((self.parameters['neuralNetwork']['vectorSize'] - neg_dist), beta) + 1 + epsilon)
-                                                loss = neg_dist * self.parameters['lossFunction']['negativeWeight'] + pos_dist * self.parameters['lossFunction']['positiveWeight']
-                                        else:
-                                            if self.parameters['lossFunction']['transform'] == "linear":
-                                                pos_transformed = pos_diff
-                                                neg_transformed = 1.0 - neg_diff
-                                                pos_loss = tf.reduce_mean(pos_transformed)
-                                                neg_loss = tf.reduce_mean(neg_transformed)
-                                                loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
-
-                                            elif self.parameters['lossFunction']['transform'] == "max":
-                                                # -ln(-x/N+1)
-                                                loss = tf.reduce_mean(tf.maximum(pos_diff - neg_diff + margin, 0))
-                                            elif self.parameters['lossFunction']['transform'] == "logarithmic":
-                                                # -ln(-x/N+1)
-                                                pos_transformed = -tf.log(-pos_diff + 1 + epsilon)
-                                                neg_transformed = -tf.log(-(1.0 - neg_diff) + 1 + epsilon)
-                                                pos_loss = tf.reduce_mean(pos_transformed)
-                                                neg_loss = tf.reduce_mean(neg_transformed)
-                                                loss = neg_loss * self.parameters['lossFunction']['negativeWeight'] + pos_loss * self.parameters['lossFunction']['positiveWeight']
-
-                                        anchorLosses.append(loss)
-                    if self.parameters['lossFunction']['batchMode'] == 'hard':
-                        anchorLoss = tf.reduce_max(tf.stack(anchorLosses))
-                    elif self.parameters['lossFunction']['batchMode'] == 'all':
-                        anchorLoss = tf.reduce_mean(tf.stack(anchorLosses))
-                    losses.append(anchorLoss)
-
-            anchorLosses = tf.stack(anchorLosses)
-            nonZeroEntries = tf.boolean_mask(anchorLosses, tf.not_equal(anchorLosses, tf.zeros_like(anchorLosses)))  # [0, 2]
+            losses = tf.stack(losses)
+            nonZeroEntries = tf.boolean_mask(losses, tf.not_equal(losses, tf.zeros_like(losses)))  # [0, 2]
 
             is_empty = tf.equal(tf.size(nonZeroEntries), 0)
 
             loss = tf.cond( is_empty,
                             lambda: tf.constant(0, tf.float32),
-                            lambda: tf.reduce_mean(anchorLosses))
+                            lambda: tf.reduce_mean(losses))
 
             return  loss
         return triplet_loss
@@ -249,14 +218,16 @@ class PillRecognitionModel:
 
             yield numpy.array(inputs), numpy.array(outputs)
 
-    def trainModel(self):
+    def loadModel(self, fileName):
+        self.model, imageNet = self.createCoreModel()
+        imageNet.load_weights(fileName)
+
+    def createCoreModel(self):
         primaryDevice = "/cpu:0"
         if self.numGPUs == 1:
             primaryDevice = "/gpu:0"
 
         with tf.device(primaryDevice):
-            input = Input((self.imageWidth, self.imageHeight, 3))
-
             imageNet = Sequential()
             imageNetCore = None
             if self.parameters['neuralNetwork']['core'] == 'resnet':
@@ -273,7 +244,7 @@ class PillRecognitionModel:
             imageNetCore.summary()
 
             imageNet.add(imageNetCore)
-            imageNet.add(Reshape([-1]))
+            imageNet.add(Reshape([2048]))
             imageNet.add(BatchNormalization())
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
@@ -282,14 +253,15 @@ class PillRecognitionModel:
 
             imageNet.summary()
 
-            encoded_predict = imageNet(input)
-
-            # Create one model for training using triplet loss, and another model for live prediction
-            model = Model(inputs=[input], outputs=encoded_predict)
-
         if self.numGPUs > 1:
-            model = multi_gpu_model(model, gpus=self.numGPUs)
+            model = multi_gpu_model(imageNet, gpus=self.numGPUs)
+        else:
+            model = imageNet
+        
+        return model, imageNet
 
+    def trainModel(self):
+        self.model, imageNet = self.createCoreModel()
 
         testingGenerator = self.generateBatch(testing=True)
         trainingGenerator = self.generateBatch(testing=False)
@@ -303,23 +275,41 @@ class PillRecognitionModel:
                 self.currentMinRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['minRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['minRotation']
                 self.currentMaxRotation.value = min(1.0, float(epoch) / float((self.parameters['augmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['augmentation']['maxRotation']
 
+            if epoch % 5 == 0:
+                imageNet.save(f"model-epoch-{epoch}.h5")
+                imageNet.save_weights(f"model-epoch-{epoch}-weights.h5")
+            imageNet.save(f"model-current.h5")
+            imageNet.save_weights(f"model-current-weights.h5")
+
             if epoch % self.parameters['epochsBeforeAccuracyMeasurement'] == (self.parameters['epochsBeforeAccuracyMeasurement']-1):
-                accuracy = self.measureAccuracy(model)
+                accuracy = self.measureAccuracy(self.model)
                 if bestAccuracy is None or accuracy > bestAccuracy:
                     bestAccuracy = accuracy
             self.measuringAccuracy = False
 
         rollingAverage9 = None
+        rollingAverage95 = None
         rollingAverage99 = None
+        rollingAverage995 = None
         def batchCallback(batch, log):
-            nonlocal rollingAverage9, rollingAverage99
+            nonlocal rollingAverage9, rollingAverage95, rollingAverage99, rollingAverage995
             if rollingAverage9 is None:
+                rollingAverage95 = log['loss']
                 rollingAverage9 = log['loss']
                 rollingAverage99 = log['loss']
+                rollingAverage995 = log['loss']
 
             rollingAverage9 = log['loss'] * 0.1 + rollingAverage9 * 0.9
+            rollingAverage95 = log['loss'] * 0.05 + rollingAverage95 * 0.95
             rollingAverage99 = log['loss'] * 0.01 + rollingAverage99 * 0.99
-            print("  batch loss", log['loss'], "  rolling loss 0.9  ", rollingAverage9,  "  rolling loss 0.99", rollingAverage99)
+            rollingAverage995 = log['loss'] * 0.005 + rollingAverage995 * 0.995
+
+            trend95 = '+' if rollingAverage9 > rollingAverage95 else '-'
+            trend99 = '+' if rollingAverage95 > rollingAverage99 else '-'
+            trend995 = '+' if rollingAverage99 > rollingAverage995 else '-'
+            trend = trend95 + trend99 + trend995
+
+            print("  batch loss", log['loss'], "  rl9  ", rollingAverage9,  "  rl99", rollingAverage99, "  trend ", trend)
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback, on_batch_end=batchCallback)
 
@@ -328,6 +318,7 @@ class PillRecognitionModel:
         callbacks = [testNearestNeighbor, reduceLRCallback]
         optimizer = None
 
+        imageNet.load_weights('model-current-weights.h5')
 
         if self.enableTensorboard:
             tensorBoardCallback = TensorBoard(
@@ -356,13 +347,13 @@ class PillRecognitionModel:
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
                 optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
 
-            model.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
+            self.model.compile(loss=self.createTripletLoss(), optimizer=optimizer)
 
-            model.summary()
-            model.count_params()
+            self.model.summary()
+            self.model.count_params()
             self.running = True
 
-            model.fit_generator(
+            self.model.fit_generator(
                 generator=trainingGenerator,
                 steps_per_epoch=self.parameters['stepsPerEpoch'],
                 epochs=self.pretrainEpochs,
@@ -374,7 +365,7 @@ class PillRecognitionModel:
                 callbacks=callbacks
             )
 
-        imageNet.layers[0].trainable = True
+            imageNet.layers[0].trainable = True
 
         if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
             optimizer = Adam(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
@@ -386,13 +377,13 @@ class PillRecognitionModel:
             optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
 
 
-        model.compile(loss=self.create_triplet_loss(), optimizer=optimizer)
+        self.model.compile(loss=self.createTripletLoss(), optimizer=optimizer)
 
-        model.summary()
-        model.count_params()
+        self.model.summary()
+        self.model.count_params()
         self.running = True
 
-        model.fit_generator(
+        self.model.fit_generator(
             generator=trainingGenerator,
             steps_per_epoch=self.parameters['stepsPerEpoch'],
             epochs=self.epochs,
@@ -403,6 +394,9 @@ class PillRecognitionModel:
             max_queue_size=self.parameters['maxQueueSize'],
             callbacks=callbacks
         )
+
+        imageNet.save(f"model-final.h5")
+        imageNet.save_weights(f"model-final-weights.h5")
 
         return bestAccuracy
 
@@ -473,10 +467,6 @@ class PillRecognitionModel:
                 print(f"        Error! Unable to measure accuracy for rotation {rotation}. All samples had bad vectors.", flush=True)
                 continue
 
-            accuracyInfo = {
-                "rot": rotation
-            }
-
             for datasetSize in self.datasetSizesToTest:
                 print(f"        Measuring accuracy on {rotation} degree rotations with dataset size {datasetSize}", flush=True)
 
@@ -503,12 +493,16 @@ class PillRecognitionModel:
                 for topk in range(1, 6):
                     accuracy = float(correct[topk]) / float(len(origVectorsForTest))
                     print(f"            Nearest Neighbor Top-{topk} Accuracy on {rotation} degree rotations with {datasetSize} total dataset size: {accuracy}", flush=True)
-                    accuracyInfo[f's_{str(datasetSize)} t_{topk}'] = accuracy
 
                     if topk == 1:
                         top1Accuracies.append(accuracy)
 
-            accuracyRows.append(accuracyInfo)
+                    accuracyRows.append({
+                        "rotation": rotation,
+                        "topk": topk,
+                        "accuracy": accuracy,
+                        "datasetSize": datasetSize
+                    })
 
         if len(top1Accuracies) == 0:
             return 0

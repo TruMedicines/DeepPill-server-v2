@@ -6,9 +6,29 @@ import scipy.misc
 import sklearn
 import time
 import random
+import math
 from pprint import pprint
 import sklearn.preprocessing
+import os
+import skimage.transform
+import skimage.draw
+import skimage.io
 import matplotlib.pyplot as plt
+
+import cv2
+
+textures = []
+
+dirs = os.listdir('Pixar 130 Library')
+for dir in dirs:
+    if 'DS_Store' not in dir:
+        files = os.listdir(f'Pixar 130 Library/{dir}')
+        for file in files:
+            if '_Normal' not in file and '_Roughness' not in file and '.DS_Store' not in file:
+                image = skimage.io.imread(f'Pixar 130 Library/{dir}/{file}')
+
+                image = skimage.transform.resize(image, (256, 256))
+                textures.append(image)
 
 
 def generate_perlin_noise_2d(shape, res):
@@ -42,6 +62,35 @@ def generate_perlin_noise_2d(shape, res):
     return np.sqrt(2) * ((1 - t[:, :, 1]) * n0 + t[:, :, 1] * n1)
 
 
+def generateRandomRectangles(shape):
+    data = np.zeros(shape)
+
+    width = shape[0]
+    height = shape[0]
+
+    for n in range(50):
+        randomRotation = random.uniform(0, 360)
+        center = (random.randint(0, width), random.randint(0, height))
+
+        rectWidth = random.randint(10, 35)
+        rectHeight = random.randint(10, 20)
+
+        rect = (center, (rectWidth, rectHeight), randomRotation)
+
+        randomAlpha = random.uniform(0.2, 0.6)
+
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        rectImage = data.copy()
+        cv2.fillPoly(rectImage, [box], (1, 1, 1))
+
+        cv2.addWeighted(rectImage, randomAlpha, data, 1 - randomAlpha, 0, data)
+
+    # plt.imshow(data, interpolation='lanczos')
+    # plt.show()
+    return data
+
+
 def generate_fractal_noise_2d(shape, res, octaves=1, persistence=0.5):
     noise = np.zeros(shape)
     frequency = 1
@@ -68,6 +117,10 @@ def cropCircle(imageData):
     mask[rr, cc, :] = 1
 
     out = imageData * mask
+
+    # randomTexture = random.choice(textures)
+    # white = randomTexture * (1.0 - mask)
+
     white = 1.0 * (1.0 - mask)
 
     imageData = out + white
@@ -82,6 +135,8 @@ def generatePillImage():
 
     np.random.seed(int(time.time() * 1000) % (2 ** 30))
     splotchMaskPattern = generate_perlin_noise_2d((splotchPatternWidth, splotchPatternHeight), (16, 16))
+    # rectanglePattern = generateRandomRectangles((splotchPatternWidth, splotchPatternHeight))
+    # splotchMaskPattern = np.maximum(splotchMaskPattern*0.8, rectanglePattern)
     splotchMaskPattern = sklearn.preprocessing.binarize(splotchMaskPattern, threshold=0.35, copy=False)
 
     # splotchMaskPattern = scipy.signal.medfilt(splotchMaskPattern, kernel_size=(13, 13))
@@ -123,19 +178,17 @@ def generatePillImage():
 
     return imageData
 
-def generateExamples(save=True):
+def generateExamples(save=True, show=False):
     for n in range(25):
         imageData = generatePillImage()
 
+        plt.imshow(imageData, interpolation='lanczos')
         if save:
-            plt.imshow(imageData, interpolation='lanczos')
-            # plt.show()
-
             plt.savefig('example-' + str(n) + ".png")
-
+        if show:
+            plt.show()
 
 def profileGeneration():
     import cProfile
     import re
     cProfile.run('generateExamples(save=False)')
-

@@ -20,23 +20,14 @@
   "rotationsToTest": [
     1,
     5,
-    10,
     15,
-    20,
     25,
-    30,
     35,
-    40,
     45
   ],
   "numGPUs": 1,
   "enableTensorboard": false,
   "imageGenerationWorkers": 2,
-   "lossFunction": {"negativeWeight": 1.0,
-                    "positiveWeight": 1.0,
-                    "transform": "logarithmic",
-                    "transformSumMode": "summed",
-                    "batchMode": "hard"},
    "neuralNetwork": {"batchSize": 16.0,
                    "augmentationsPerImage": 4,
                    "core": "inceptionnet",
@@ -51,7 +42,7 @@
                    "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 100
+                   "epochs": 1000
    },
   "startingWeights": {
     "weights": "none"
