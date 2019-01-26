@@ -17,10 +17,9 @@
     "optimizer": {
       "optimizerName": "rmsprop",
       "learningRate": 0.000615659763457,
+      "learningRateDecay": 0.95,
       "pretrainLearningRate": 0.000615659763457
     },
-    "reduceLRFactor": 0.2,
-    "reduceLRPatience": 4,
     "vectorSize": 723
   },
   "startingWeights": {

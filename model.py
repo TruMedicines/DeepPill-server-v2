@@ -2,18 +2,20 @@ from keras.applications import MobileNetV2, InceptionV3, ResNet50, NASNetMobile,
 from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, Flatten, Subtract, Lambda, Concatenate
 from keras.models import Sequential, Model
 from keras.optimizers import Adam, Nadam, RMSprop, SGD
-from keras.callbacks import LambdaCallback, TensorBoard, ReduceLROnPlateau
+from keras.callbacks import LambdaCallback, TensorBoard, LearningRateScheduler
 from keras.utils import multi_gpu_model
 from keras.regularizers import l1, l2
 import keras.backend as K
 from keras.preprocessing.image import ImageDataGenerator
 from imgaug import augmenters as iaa
 import csv
+import tempfile
 import tensorflow as tf
 from scipy.misc import imsave, imread
 import os
 import sklearn.metrics
 import numpy
+import pickle
 import psutil
 import matplotlib.pyplot as plt
 import os.path
@@ -108,7 +110,6 @@ class PillRecognitionModel:
 
         for n in range(parameters['imageGenerationWorkers']):
             newThread = threading.Thread(target=self.imageGenerationThread, daemon=False)
-            newThread.start()
             self.imageGenerationThreads.append(newThread)
 
     def imageGenerationThread(self):
@@ -249,6 +250,7 @@ class PillRecognitionModel:
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
             imageNet.add(BatchNormalization())
+            # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
@@ -261,6 +263,9 @@ class PillRecognitionModel:
         return model, imageNet
 
     def trainModel(self):
+        for thread in self.imageGenerationThreads:
+            thread.start()
+
         self.model, imageNet = self.createCoreModel()
 
         testingGenerator = self.generateBatch(testing=True)
@@ -313,9 +318,9 @@ class PillRecognitionModel:
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback, on_batch_end=batchCallback)
 
-        reduceLRCallback = ReduceLROnPlateau(monitor='loss', factor=self.parameters["neuralNetwork"]["reduceLRFactor"], patience=self.parameters["neuralNetwork"]["reduceLRPatience"], verbose=1)
+        learningRateScheduler = LearningRateScheduler(lambda epoch, lr: self.parameters['neuralNetwork']['optimizer']['learningRate'] * (self.parameters['neuralNetwork']['optimizer']['learningRateDecay'] ** epoch))
 
-        callbacks = [testNearestNeighbor, reduceLRCallback]
+        callbacks = [testNearestNeighbor, learningRateScheduler]
         optimizer = None
 
         imageNet.load_weights('model-current-weights.h5')
@@ -416,10 +421,10 @@ class PillRecognitionModel:
                 futures = []
                 with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as worker:
                     for n in range(int(maxDatasetSize/10)):
-                        futures.append(worker.submit(globalGenerateTestImages, self.imageWidth, self.imageHeight, self.rotationsToTest))
+                        futures.append(worker.submit(globalGenerateTestImages, self.imageWidth, self.imageHeight, [0], self.rotationsToTest))
 
                     for future in concurrent.futures.as_completed(futures):
-                        self.measurementImages.append(future.result()[0])
+                        self.measurementImages.append(future.result()[0][0])
                         for rotation in self.rotationsToTest:
                             self.measurementRotatedImages[rotation].append(future.result()[1][rotation])
                         completedImages += 1
@@ -516,11 +521,129 @@ class PillRecognitionModel:
         return meanTop1Accuracy
 
 
-def globalGenerateTestImages(width, height, rotations):
+    def finalMeasureAccuracy(self, model):
+        print("Measuring Accuracy", flush=True)
+        dbVectors = {}
+        testVectors = {}
+        currentImageId = 0
+
+        print("    Generating and vectorizing test images", flush=True)
+        completedImages = 0
+        # Build images in sets of 10 batches. This is to get around a python multiprocessing bug.
+        with tempfile.TemporaryDirectory() as dir:
+            for n in range(int(self.parameters['finalTestImages'])):
+                imageId = currentImageId
+                currentImageId += 1
+
+                result = globalGenerateFinalTestImage(self.imageWidth, self.imageHeight, self.parameters, imageId, dir)
+
+                imageId = result[0]
+                dbImages = result[1]
+                testImages = result[2]
+
+                dbVectors[imageId] = model.predict(numpy.array(dbImages))
+
+                testVectors[imageId] = []
+                for augmentation in testImages:
+                    vectors = model.predict(numpy.array(augmentation))
+                    testVectors[imageId].append(vectors)
+
+                completedImages += 1
+
+                if completedImages % self.parameters['finalTestPrintEvery'] == 0:
+                    print(f"        Completed {completedImages} images.", flush=True)
+
+        print("    Measuring Final Accuracy", flush=True)
+
+
+        concatDBVectors = []
+        concatDBOutputs = []
+        for imageId in dbVectors:
+            for vector in dbVectors[imageId]:
+                concatDBVectors.append(vector)
+                concatDBOutputs.append(imageId)
+
+        for neigbors in range(1, 30, 2):
+            nearestNeighborModel = sklearn.neighbors.KNeighborsClassifier(n_neighbors=neigbors)
+            print("Fitting model")
+            nearestNeighborModel.fit(concatDBVectors, concatDBOutputs)
+
+            print("Computing match results")
+            totalCorrect = 0
+            total = 0
+            for imageId in testVectors:
+                for augmentation in testVectors[imageId]:
+                    classes = nearestNeighborModel.predict(augmentation)
+
+                    counts = {}
+                    maxCount = 0
+                    maxPredictId = None
+                    for predictId in classes:
+                        counts[predictId] = counts.get(0, predictId) + 1
+
+                        if counts[predictId] > maxCount:
+                            maxPredictId = predictId
+                            maxCount = counts[predictId]
+
+                    total += 1
+                    if maxPredictId == imageId:
+                        totalCorrect += 1
+                    accuracy = float(totalCorrect) / float(total)
+
+                    if total % 100 == 0:
+                        print(accuracy)
+
+            accuracy = float(totalCorrect) / float(total)
+
+            print(f"Accuracy with neighbors {neigbors} is {accuracy}")
+
+        return accuracy
+
+
+
+def globalGenerateTestImages(width, height, baseRotations, testRotations):
     image = generatePillImage()
     image = skimage.transform.resize(image, (width, height, 3), mode='reflect', anti_aliasing=True)
-    rotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in rotations}
-    return image, rotated
+    baseRotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in baseRotations}
+    testRotated = {rotation: skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1) for rotation in testRotations}
+    return baseRotated, testRotated
+
+
+
+def globalGenerateFinalTestImage(width, height, parameters, imageId, dir):
+    augmentation =  iaa.Sequential([
+            iaa.Affine(
+                scale=(parameters["finalTestAugmentation"]["minScale"], parameters["finalTestAugmentation"]["maxScale"]),
+                translate_percent=(parameters["finalTestAugmentation"]["minTranslate"], parameters["finalTestAugmentation"]["maxTranslate"]),
+                cval=255),
+            iaa.GaussianBlur(sigma=(parameters["finalTestAugmentation"]["minGaussianBlur"], parameters["finalTestAugmentation"]["maxGaussianBlur"])),
+            iaa.MotionBlur(k=(parameters["finalTestAugmentation"]["minMotionBlur"], parameters["finalTestAugmentation"]["maxMotionBlur"]))
+        ])
+
+    image = generatePillImage()
+    image = skimage.transform.resize(image, (width, height, 3), mode='reflect', anti_aliasing=True)
+
+    dbImages = []
+    for rotation in range(0, 360, parameters['finalTestRotationIncrement']):
+        dbImages.append(skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1))
+
+    testImages = []
+    for n in range(parameters['finalTestAugmentationsPerImage']):
+        rotated = skimage.transform.rotate(image, angle=random.randint(0, 360), mode='constant', cval=1)
+        augmented = augmentation.augment_images(numpy.array([rotated]) * 255.0)[0]
+        augmented /= 255.0
+
+        # Now we make the query rotations
+        testRotations = []
+        for rotation in range(0, 360, parameters['finalTestQueryRotationIncrement']):
+            rotated = skimage.transform.rotate(augmented, angle=rotation, mode='constant', cval=1)
+            testRotations.append(rotated)
+        testImages.append(testRotations)
+
+    data = (imageId, dbImages, testImages)
+    return data
+
+
 
 def globalGenerateSingleTriplet(currentMaxRotation, currentMinRotation, parameters, imageWidth, imageHeight, vectorSize):
     augmentation =  iaa.Sequential([

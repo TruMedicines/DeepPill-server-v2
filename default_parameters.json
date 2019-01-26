@@ -35,11 +35,10 @@
                    "dropoutRate": 0.5,
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
+                                 "learningRateDecay": 0.95,
                                  "pretrainLearningRate": 1e-3,
                                  "optimizerName": "adam"},
                    "vectorSize": 1024,
-                   "reduceLRPatience": 5,
-                   "reduceLRFactor": 0.75,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
                    "epochs": 1000
@@ -66,5 +65,20 @@
       "minRotationEasing": 0.35,
       "maxRotationEasing": 0.35
     }
+  },
+  "finalTestPrintEvery": 100,
+  "finalTestImages": 5000,
+  "finalTestRotationIncrement": 3,
+  "finalTestAugmentationsPerImage": 8,
+  "finalTestQueryRotationIncrement": 15,
+  "finalTestAugmentation": {
+    "minScale": 0.9,
+    "maxScale": 1.1,
+    "minTranslate": -0.1,
+    "maxTranslate": 0.1,
+    "minGaussianBlur": 0,
+    "maxGaussianBlur": 1,
+    "minMotionBlur": 5,
+    "maxMotionBlur": 11
   }
 }

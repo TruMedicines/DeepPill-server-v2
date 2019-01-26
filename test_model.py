@@ -19,6 +19,6 @@ pprint(mergedParameters)
 model = PillRecognitionModel(mergedParameters)
 
 model.loadModel(sys.argv[2])
-model.measureAccuracy(model.model)
+model.finalMeasureAccuracy(model.model)
 
 
