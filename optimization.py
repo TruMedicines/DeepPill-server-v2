@@ -3,6 +3,7 @@ import json
 import sys
 from pprint import pprint
 from utilities import merge
+from generated_dataset import GeneratedDataset
 
 def trainRound1Optimization(parameters):
     with open('default_parameters.json', 'rt') as file:
@@ -16,7 +17,8 @@ def trainRound1Optimization(parameters):
 
     print("Training model with the following parameters")
     pprint(mergedParameters)
-    model = PillRecognitionModel(mergedParameters)
+    dataset = GeneratedDataset(mergedParameters)
+    model = PillRecognitionModel(mergedParameters, dataset)
     accuracy = model.trainModel()
     return {"loss": 1.0 - accuracy, "status": "ok"}
 

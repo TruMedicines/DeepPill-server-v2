@@ -1,0 +1,4 @@
+- Fill out timesheets
+- Retest the post-processing techniques
+- Put in various pre-processing techniques
+- Next bayesian optimization sequence

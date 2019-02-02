@@ -3,6 +3,7 @@ import json
 import sys
 from pprint import pprint
 from utilities import merge
+from generated_dataset import GeneratedDataset
 
 configFilePath = sys.argv[1]
 with open('default_parameters.json', 'rt') as file:
@@ -16,7 +17,8 @@ merge(parameters, mergedParameters)
 
 print("Training model with the following parameters")
 pprint(mergedParameters)
-model = PillRecognitionModel(mergedParameters)
+dataset = GeneratedDataset(mergedParameters)
+model = PillRecognitionModel(mergedParameters, dataset)
 model.trainModel()
 
 

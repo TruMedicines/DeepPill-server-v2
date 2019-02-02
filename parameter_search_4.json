@@ -1,0 +1,188 @@
+{
+  "hyperparameters": {
+    "type": "object",
+    "properties": {
+      "neuralNetwork": {
+        "type": "object",
+        "properties": {
+          "lossMode": {
+            "type": "string",
+            "enum": [
+              "hard",
+              "all"
+            ]
+          },
+          "lossMargin": {
+            "type": "number",
+            "min": 0.1,
+            "max": 0.5
+          },
+          "optimizer": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "adam"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "learningRateDecay": {
+                    "type": "number",
+                    "min": 0.86,
+                    "max": 0.995,
+                    "scaling": "linear"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "nadam"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "learningRateDecay": {
+                    "type": "number",
+                    "min": 0.86,
+                    "max": 0.995,
+                    "scaling": "linear"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "sgd"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "learningRateDecay": {
+                    "type": "number",
+                    "min": 0.86,
+                    "max": 0.995,
+                    "scaling": "linear"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "optimizerName": {
+                    "type": "string",
+                    "constant": "rmsprop"
+                  },
+                  "learningRate": {
+                    "type": "number",
+                    "min": 1e-4,
+                    "max": 5e-3,
+                    "scaling": "logarithmic"
+                  },
+                  "learningRateDecay": {
+                    "type": "number",
+                    "min": 0.86,
+                    "max": 0.995,
+                    "scaling": "linear"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "trainingAugmentation": {
+        "type": "object",
+        "properties": {
+          "gaussianNoise": {
+            "type": "number",
+            "min": 0,
+            "max": 0.5,
+            "scaling": "linear"
+          }
+        }
+      },
+      "preprocessing": {
+        "type": "object",
+        "properties": {
+          "detectCircle": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false"
+            ]
+          },
+          "edgeDetection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "string",
+                    "constant": "true"
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "min": 5,
+                    "max": 250,
+                    "rounding": 1,
+                    "scaling": "linear"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "string",
+                    "constant": "false"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "results": {
+    "directory": "results",
+    "graphs": false
+  },
+  "ui": {
+    "enabled": true
+  },
+  "function": {
+    "type": "remote",
+    "command": "~/eb-pill-match/remote.sh",
+    "hosts": [
+      "localhost",
+      "52.244.255.34",
+      "52.244.231.14"
+    ],
+    "parallel": 3,
+    "auto_kill_max_time": 14400,
+    "auto_kill_loss": 1
+  },
+  "search": {
+    "method": "atpe",
+    "iterations": 1000
+  }
+}
+

@@ -13,26 +13,25 @@
     1250,
     1500,
     1750,
-    2000,
-    2250,
-    2500
+    2000
   ],
   "rotationsToTest": [
-    1,
     5,
     15,
     25,
     35,
     45
   ],
-  "numGPUs": -1,
+  "imageWidth": 224,
+  "imageHeight": 224,
+  "numGPUs": 1,
   "enableTensorboard": false,
   "imageGenerationWorkers": 2,
-   "neuralNetwork": {"batchSize": 16.0,
+   "neuralNetwork": {"batchSize": 8.0,
                    "augmentationsPerImage": 4,
                    "core": "inceptionnet",
-                   "denseLayerMultiplier": 3,
-                   "dropoutRate": 0.5,
+                   "denseLayerMultiplier": 4,
+                   "dropoutRate": 0.45,
                    "optimizer": {"$index": 3,
                                  "learningRate": 1e-3,
                                  "learningRateDecay": 0.95,
@@ -41,29 +40,46 @@
                    "vectorSize": 1024,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 1000
+                   "epochs": 10,
+                   "lossMode": "all",
+                   "lossMargin": 0.3
    },
   "startingWeights": {
-    "weights": "none"
+    "pretrainPercent": 0,
+    "weights": "imagenet"
   },
-  "augmentation": {
-    "gaussianNoise": 0.35,
-    "minRotation": 0,
-    "maxRotation": 90,
-    "piecewiseAffine": 0.02,
-    "minScale": 0.9,
-    "maxScale": 1.1,
+  "generateAugmentation": {
+    "minScale": 0.7,
+    "maxScale": 0.9,
     "minTranslate": -0.1,
     "maxTranslate": 0.1,
     "minGaussianBlur": 0,
     "maxGaussianBlur": 1,
     "minMotionBlur": 5,
     "maxMotionBlur": 11,
+    "minRotation": 0,
+    "maxRotation": 1,
+    "minShear": -12,
+    "maxShear": 12,
+    "minContrast": 0.9,
+    "maxContrast": 1.2,
+    "minBrightness": -8,
+    "maxBrightness": 5
+  },
+  "preprocessing": {
+    "detectCircle": "false",
+    "edgeDetection": {"enabled": "false", "threshold": 200}
+  },
+  "trainingAugmentation": {
+    "gaussianNoise": 0.15,
+    "minRotation": 25,
+    "maxRotation": 50,
+    "piecewiseAffine": 0.006345186964944,
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",
-      "minRotationEasing": 0.35,
-      "maxRotationEasing": 0.35
+      "minRotationEasing": 3.0,
+      "maxRotationEasing": 0.1
     }
   },
   "finalTestPrintEvery": 100,

@@ -1,5 +1,5 @@
 {
-  "augmentation": {
+  "trainingAugmentation": {
     "gaussianNoise": 0.339835624747714,
     "minRotation": 25,
     "maxRotation": 50,
@@ -16,7 +16,7 @@
     "dropoutRate": 0.451472467407633,
     "optimizer": {
       "optimizerName": "rmsprop",
-      "learningRate": 0.000615659763457,
+      "learningRate": 0.000115659763457,
       "learningRateDecay": 0.95,
       "pretrainLearningRate": 0.000615659763457
     },
