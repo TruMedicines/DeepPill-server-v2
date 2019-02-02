@@ -89,6 +89,7 @@ class PillRecognitionModel:
         self.augmentedTripletListLock = threading.Lock()
         self.running = False
         self.measuringAccuracy = False
+        self.finished = False
         self.startTime = datetime.datetime.now()
         self.imageId = 0
 
@@ -107,7 +108,7 @@ class PillRecognitionModel:
             self.imageGenerationThreads.append(newThread)
 
     def imageGenerationThread(self):
-        while threading.main_thread().isAlive():
+        while threading.main_thread().isAlive() and not self.finished:
             imageId = self.imageId
             self.imageId += 1
 
@@ -407,6 +408,9 @@ class PillRecognitionModel:
 
         imageNet.save(f"model-final.h5")
         imageNet.save_weights(f"model-final-weights.h5")
+
+        self.finished = True
+        del self.imageGenerationExecutor
 
         return bestAccuracy
 

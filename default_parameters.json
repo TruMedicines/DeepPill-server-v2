@@ -28,7 +28,7 @@
   "enableTensorboard": false,
   "imageGenerationWorkers": 2,
    "neuralNetwork": {"batchSize": 8.0,
-                   "augmentationsPerImage": 4,
+                   "augmentationsPerImage": 3,
                    "core": "inceptionnet",
                    "denseLayerMultiplier": 4,
                    "dropoutRate": 0.45,
