@@ -1,5 +1,6 @@
 from keras.applications import MobileNetV2, InceptionV3, ResNet50, NASNetMobile, NASNetLarge
 from keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Reshape, Input, Flatten, Subtract, Lambda, Concatenate
+from keras.regularizers import l1, l2
 from keras.models import Sequential, Model
 from keras.optimizers import Adam, Nadam, RMSprop, SGD
 from keras.callbacks import LambdaCallback, TensorBoard, LearningRateScheduler
@@ -21,6 +22,7 @@ import pickle
 import psutil
 import matplotlib.pyplot as plt
 import os.path
+import scipy.stats
 import random
 import copy
 import sklearn.neighbors
@@ -31,6 +33,7 @@ import time
 from pprint import pprint
 import math
 import skimage.transform
+import skimage.io
 import random
 import concurrent.futures
 import multiprocessing
@@ -78,7 +81,8 @@ class PillRecognitionModel:
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
-        set_session(tf.Session(config=config))
+        self.session = tf.Session(config=config)
+        set_session(self.session)
 
         self.maxImagesToGenerate = 100
         self.imageGenerationManager = multiprocessing.Manager()
@@ -92,11 +96,14 @@ class PillRecognitionModel:
         self.finished = False
         self.startTime = datetime.datetime.now()
         self.imageId = 0
+        self.imageIdLock = threading.Lock()
+
+        self.startEpoch = parameters.get('startEpoch', 0)
 
         if parameters['trainingAugmentation']['rotationEasing']['easing'] == 'epoch':
             self.currentMinRotation = self.imageGenerationManager.Value('i', 0)
             self.currentMaxRotation = self.imageGenerationManager.Value('i', 1)
-            self.updateRotationValues(0)
+            self.updateRotationValues(self.startEpoch)
         else:
             self.currentMinRotation = self.imageGenerationManager.Value('i', parameters['trainingAugmentation']['minRotation'])
             self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['trainingAugmentation']['maxRotation'])
@@ -104,28 +111,35 @@ class PillRecognitionModel:
         time.sleep(2)
 
         for n in range(parameters['imageGenerationWorkers']):
-            newThread = threading.Thread(target=self.imageGenerationThread, daemon=False)
+            newThread = threading.Thread(target=self.imageGenerationThread, daemon=True)
             self.imageGenerationThreads.append(newThread)
 
     def imageGenerationThread(self):
         while threading.main_thread().isAlive() and not self.finished:
-            imageId = self.imageId
-            self.imageId += 1
+            try:
+                with self.imageIdLock:
+                    imageId = self.imageId
+                    self.imageId += 1
 
-            if self.imageId % 100 == 0:
-                self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
+                if self.imageId % 100 == 0:
+                    self.imageGenerationExecutor.shutdown(wait=False)
+                    self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
 
-            self.dataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                self.dataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
 
-            future = self.imageGenerationExecutor.submit(self.dataset.getTrainingImageSet, imageId)
-            triplet = future.result()
+                future = self.imageGenerationExecutor.submit(self.dataset.getTrainingImageSet, imageId)
+                triplet = future.result()
 
-            with self.augmentedTripletListLock:
-                self.augmentedImages.append(triplet)
-                if len(self.augmentedImages) >= self.maxImagesToGenerate:
-                    del self.augmentedImages[0]
-            if not self.running or self.measuringAccuracy:
-                time.sleep(1.0)
+                with self.augmentedTripletListLock:
+                    self.augmentedImages.append(triplet)
+                    if len(self.augmentedImages) >= self.maxImagesToGenerate:
+                        del self.augmentedImages[0]
+                if not self.running or self.measuringAccuracy:
+                    time.sleep(1.0)
+            except OSError as e:
+                time.sleep(2.0)
+            except RuntimeError as e:
+                time.sleep(2.0)
 
     def getAvailableGpus(self):
         local_device_protos = device_lib.list_local_devices()
@@ -196,7 +210,27 @@ class PillRecognitionModel:
                                 loss = tf.maximum(pos_dist - neg_dist + self.parameters['neuralNetwork']['lossMargin'], 0.0)
                                 losses.append(loss)
 
-            return tf.reduce_mean(losses)
+            tf.summary.tensor_summary(
+                "batch_nonzero",
+                tf.count_nonzero(losses),
+                summary_description=None,
+                collections=None,
+                summary_metadata=None,
+                family=None,
+                display_name=None
+            )
+
+            # regularizationLosses = []
+            # for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
+            #     for k in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
+            #         anchor = tf.convert_to_tensor(y_pred[n*self.parameters['neuralNetwork']['augmentationsPerImage'] + k])
+            #         anchorSorted = tf.contrib.framework.sort(anchor)
+            #         penalty = tf.reduce_mean(anchorSorted[0:int(self.parameters['neuralNetwork']['vectorSize']/2)]) \
+            #         - tf.reduce_mean(anchorSorted[int(self.parameters['neuralNetwork']['vectorSize']/2):])
+            #
+            #         regularizationLosses.append(penalty)
+
+            return tf.reduce_mean(losses) # + tf.reduce_mean(regularizationLosses) * 0.01
         return triplet_loss
 
     def generateBatch(self, testing=False):
@@ -207,13 +241,15 @@ class PillRecognitionModel:
 
             triplets = random.sample(range(min(len(self.augmentedImages)-1, self.maxImagesToGenerate-1)), min(len(self.augmentedImages)-1, int(self.parameters['neuralNetwork']['batchSize'])))
 
-            # Augment the images
+            # Add each image into the batch
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
                 tripletInputs = self.augmentedImages[triplets[n]]
 
                 for input in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
                     inputs.append(tripletInputs[input])
                     outputs.append(numpy.ones(self.parameters['neuralNetwork']['vectorSize']))
+
+            # Add in blends to the batch
 
             yield numpy.array(inputs), numpy.array(outputs)
 
@@ -249,7 +285,8 @@ class PillRecognitionModel:
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
             imageNet.add(BatchNormalization())
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], activity_regularizer=l2(1e-5)))
+            # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
 
@@ -266,6 +303,9 @@ class PillRecognitionModel:
         self.currentMaxRotation.value = min(1.0, float(epoch+1) / float(
             (self.parameters['trainingAugmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['trainingAugmentation']['maxRotation']
 
+    def learningRateForEpoch(self, epoch):
+        return self.parameters['neuralNetwork']['optimizer']['learningRate'] * (self.parameters['neuralNetwork']['optimizer']['learningRateDecay'] ** epoch)
+
     def trainModel(self):
         for thread in self.imageGenerationThreads:
             thread.start()
@@ -276,6 +316,7 @@ class PillRecognitionModel:
         trainingGenerator = self.generateBatch(testing=False)
 
         bestAccuracy = None
+        allAccuracies = []
 
         def epochCallback(epoch, logs):
             nonlocal bestAccuracy
@@ -294,6 +335,7 @@ class PillRecognitionModel:
                 if bestAccuracy is None or accuracy > bestAccuracy:
                     bestAccuracy = accuracy
                     imageNet.save_weights(f"model-best-weights.h5")
+                allAccuracies.append(accuracy)
             self.measuringAccuracy = False
 
         rollingAverage9 = None
@@ -324,17 +366,19 @@ class PillRecognitionModel:
 
         testNearestNeighbor = LambdaCallback(on_epoch_end=epochCallback, on_batch_end=batchCallback)
 
-        learningRateScheduler = LearningRateScheduler(lambda epoch, lr: self.parameters['neuralNetwork']['optimizer']['learningRate'] * (self.parameters['neuralNetwork']['optimizer']['learningRateDecay'] ** epoch))
+        learningRateScheduler = LearningRateScheduler(lambda epoch, lr: self.learningRateForEpoch(epoch))
 
         callbacks = [testNearestNeighbor, learningRateScheduler]
         optimizer = None
 
-        # imageNet.load_weights('model-current-weights.h5')
+        if 'loadFile' in self.parameters:
+            imageNet.load_weights(self.parameters['loadFile'])
 
         if self.enableTensorboard:
-            tensorBoardCallback = TensorBoard(
+            tensorBoardCallback = CustomTensorBoard(
+                user_defined_freq=1,
                 log_dir='./logs',
-                histogram_freq=0,
+                histogram_freq=5,
                 batch_size=self.parameters['neuralNetwork']['batchSize'],
                 write_graph=True,
                 write_grads=False,
@@ -350,13 +394,13 @@ class PillRecognitionModel:
             imageNet.layers[0].trainable = False
 
             if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
-                optimizer = Adam(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
+                optimizer = Adam(self.learningRateForEpoch(self.startEpoch))
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'nadam':
-                optimizer = Nadam(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
+                optimizer = Nadam(self.learningRateForEpoch(self.startEpoch))
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'rmsprop':
-                optimizer = RMSprop(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
+                optimizer = RMSprop(self.learningRateForEpoch(self.startEpoch))
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
-                optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["pretrainLearningRate"])
+                optimizer = SGD(self.learningRateForEpoch(self.startEpoch))
 
             self.model.compile(loss=self.createTripletLoss(), optimizer=optimizer)
 
@@ -373,19 +417,20 @@ class PillRecognitionModel:
                 workers=1,
                 use_multiprocessing=False,
                 max_queue_size=self.parameters['maxQueueSize'],
-                callbacks=callbacks
+                callbacks=callbacks,
+                initial_epoch=self.startEpoch
             )
 
             imageNet.layers[0].trainable = True
 
         if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
-            optimizer = Adam(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+            optimizer = Adam(self.learningRateForEpoch(self.startEpoch))
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'nadam':
-            optimizer = Nadam(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+            optimizer = Nadam(self.learningRateForEpoch(self.startEpoch))
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'rmsprop':
-            optimizer = RMSprop(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+            optimizer = RMSprop(self.learningRateForEpoch(self.startEpoch))
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
-            optimizer = SGD(self.parameters["neuralNetwork"]["optimizer"]["learningRate"])
+            optimizer = SGD(self.learningRateForEpoch(self.startEpoch))
 
 
         self.model.compile(loss=self.createTripletLoss(), optimizer=optimizer)
@@ -403,16 +448,25 @@ class PillRecognitionModel:
             workers=1,
             use_multiprocessing=False,
             max_queue_size=self.parameters['maxQueueSize'],
-            callbacks=callbacks
+            callbacks=callbacks,
+            initial_epoch=self.startEpoch
         )
 
         imageNet.save(f"model-final.h5")
         imageNet.save_weights(f"model-final-weights.h5")
 
         self.finished = True
+        time.sleep(5)
+        self.imageGenerationExecutor.shutdown()
         del self.imageGenerationExecutor
+        K.clear_session()
+        self.session.close()
+        del self.session
+        time.sleep(5)
 
-        return bestAccuracy
+        slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(list(range(len(allAccuracies))), allAccuracies)
+
+        return min(1, max(0, slope * 20))
 
     def measureAccuracy(self, model):
         print("Measuring Accuracy", flush=True)
@@ -424,13 +478,15 @@ class PillRecognitionModel:
             }
 
             print("    Generating test images", flush=True)
+            imageId = 0
             completedImages = 0
             # Build images in sets of 20 batches. This is to get around a python multiprocessing bug.
-            for k in range(20):
+            for k in range(25):
                 futures = []
                 with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as worker:
-                    for n in range(int(maxDatasetSize/20)):
-                        futures.append(worker.submit(self.dataset.getRotationTestingImageSet))
+                    for n in range(int(maxDatasetSize/25)):
+                        futures.append(worker.submit(self.dataset.getRotationTestingImageSet, imageId))
+                        imageId += 1
 
                     for future in concurrent.futures.as_completed(futures):
                         self.measurementImages.append(future.result()[0])
@@ -453,7 +509,10 @@ class PillRecognitionModel:
             batchStart = batch * self.testingBatchSize
             batchEnd = (batch + 1) * self.testingBatchSize
 
+
             batchOriginals = self.measurementImages[batchStart:batchEnd]
+            if len(batchOriginals) == 0:
+                break
             batchOriginalVectors = model.predict(numpy.array(batchOriginals))
 
             for rotation in self.rotationsToTest:
@@ -536,6 +595,18 @@ class PillRecognitionModel:
         testVectors = {}
         currentImageId = 0
 
+        if not os.path.exists('data'):
+            os.mkdir("data")
+        if not os.path.exists("data/images"):
+            os.mkdir("data/images")
+
+        vectorsFile = open('vectors.tsv', 'wt')
+        vectorsCSVWriter = csv.DictWriter(vectorsFile, fieldnames=list(range(self.parameters['neuralNetwork']['vectorSize'])), dialect=csv.excel_tab)
+
+        metadataFile = open('metadata.tsv', 'wt')
+        metadataCSVWriter = csv.DictWriter(metadataFile, fieldnames=['imageId', 'augmentationId', 'index'], dialect=csv.excel_tab)
+        metadataCSVWriter.writeheader()
+
         print("    Generating and vectorizing test images", flush=True)
         completedImages = 0
         # Build images in sets of 10 batches. This is to get around a python multiprocessing bug.
@@ -544,103 +615,190 @@ class PillRecognitionModel:
                 imageId = currentImageId
                 currentImageId += 1
 
-                result = globalGenerateFinalTestImage(self.imageWidth, self.imageHeight, self.parameters, imageId, dir)
+                result = self.dataset.getFinalTestingImageSet(imageId)
+
+                if not os.path.exists(f"data/images/{imageId}"):
+                    os.mkdir(f"data/images/{imageId}")
 
                 imageId = result[0]
                 dbImages = result[1]
                 testImages = result[2]
 
-                dbVectors[imageId] = model.predict(numpy.array(dbImages))
+                for imageIndex, image in enumerate(dbImages):
+                    skimage.io.imsave(f"data/images/{imageId}/db-{imageIndex}.png", image)
+
+                for augmentationIndex, augmentation in enumerate(testImages):
+                    for imageIndex, image in enumerate(augmentation):
+                        skimage.io.imsave(f"data/images/{imageId}/test-{augmentationIndex}-{imageIndex}.png", image)
+
+                dbVectors[imageId] = sklearn.preprocessing.normalize(model.predict(numpy.array(dbImages)))
+
+                for vectorIndex, vector in enumerate(dbVectors[imageId]):
+                    metadataCSVWriter.writerow({
+                        "imageId": imageId,
+                        "augmentationId": "db",
+                        "index": vectorIndex
+                    })
+                    vectorsCSVWriter.writerow({index: value for index,value in enumerate(vector)})
 
                 testVectors[imageId] = []
-                for augmentation in testImages:
-                    vectors = model.predict(numpy.array(augmentation))
+                for augmentationIndex, augmentation in enumerate(testImages):
+                    vectors = sklearn.preprocessing.normalize(model.predict(numpy.array(augmentation)))
                     testVectors[imageId].append(vectors)
+
+                    for vectorIndex, vector in enumerate(vectors):
+                        metadataCSVWriter.writerow({
+                            "imageId": imageId,
+                            "augmentationId": augmentationIndex,
+                            "index": vectorIndex
+                        })
+                        vectorsCSVWriter.writerow({index: value for index,value in enumerate(vector)})
 
                 completedImages += 1
 
                 if completedImages % self.parameters['finalTestPrintEvery'] == 0:
                     print(f"        Completed {completedImages} images.", flush=True)
 
+        vectorsFile.close()
+        metadataFile.close()
+
         print("    Measuring Final Accuracy", flush=True)
 
 
         concatDBVectors = []
-        concatDBOutputs = []
+        concatDBIds = []
         for imageId in dbVectors:
             for vector in dbVectors[imageId]:
                 concatDBVectors.append(vector)
-                concatDBOutputs.append(imageId)
+                concatDBIds.append(imageId)
 
-        for neigbors in range(1, 30, 2):
-            nearestNeighborModel = sklearn.neighbors.KNeighborsClassifier(n_neighbors=neigbors)
-            print("Fitting model")
-            nearestNeighborModel.fit(concatDBVectors, concatDBOutputs)
+        print("Fitting model")
+        nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=30)
+        nearestNeighborModel.fit(concatDBVectors)
 
-            print("Computing match results")
-            totalCorrect = 0
+        for neigbors in range(1, 30, 1):
+            print("Computing match results for neighbors ", neigbors)
+            totalCorrectCountMethod = 0
+            totalCorrectMinDistMethod = 0
+            totalCorrectAvgDistMethod = 0
             total = 0
             for imageId in testVectors:
-                for augmentation in testVectors[imageId]:
-                    classes = nearestNeighborModel.predict(augmentation)
+                for augIndex, augmentation in enumerate(testVectors[imageId]):
+                    rotationDistances, rotationMatchingIndexes = nearestNeighborModel.kneighbors(augmentation, n_neighbors=neigbors)
 
-                    counts = {}
-                    maxCount = 0
-                    maxPredictId = None
-                    for predictId in classes:
-                        counts[predictId] = counts.get(0, predictId) + 1
+                    totalCounts = {}
+                    totalDistances = {}
+                    minDistances = {}
+                    for distances, indexes in zip(rotationDistances, rotationMatchingIndexes):
+                        for distance, index in zip(distances, indexes):
+                            predictId = concatDBIds[index]
+                            totalCounts[predictId] = totalCounts.get(predictId, 0) + 1
+                            totalDistances[predictId] = totalDistances.get(predictId, 0) + distance
+                            minDistances[predictId] = min(minDistances.get(predictId, distance), distance)
 
-                        if counts[predictId] > maxCount:
-                            maxPredictId = predictId
-                            maxCount = counts[predictId]
+                    maxCount = None
+                    maxCountId = None
+
+                    minDist = None
+                    minDistId = None
+
+                    minAvgDist = None
+                    minAvgDistId = None
+
+                    for predictId in totalCounts:
+                        if maxCount is None or totalCounts[predictId] > maxCount:
+                            maxCount = totalCounts[predictId]
+                            maxCountId = predictId
+
+                        if minDist is None or minDistances[predictId] < minDist:
+                            minDist = minDistances[predictId]
+                            minDistId = predictId
+
+                        averageDist = totalDistances[predictId] / totalCounts[predictId]
+                        if minAvgDist is None or averageDist < minAvgDist:
+                            minAvgDist = averageDist
+                            minAvgDistId = predictId
 
                     total += 1
-                    if maxPredictId == imageId:
-                        totalCorrect += 1
-                    accuracy = float(totalCorrect) / float(total)
+                    if maxCountId == imageId:
+                        totalCorrectCountMethod += 1
+                    else:
+                        print(f"imageId: {imageId}, augmentation: {augIndex}")
+                        pprint(totalCounts)
+
+                    if minDistId == imageId:
+                        totalCorrectMinDistMethod += 1
+
+                    if minAvgDistId == imageId:
+                        totalCorrectAvgDistMethod += 1
+
+                    countMethodAccuracy = float(totalCorrectCountMethod) / float(total)
+                    minDistMethodAccuracy = float(totalCorrectMinDistMethod) / float(total)
+                    avgDistMethodAccuracy = float(totalCorrectAvgDistMethod) / float(total)
 
                     if total % 100 == 0:
-                        print(accuracy, flush=True)
+                        print(countMethodAccuracy, minDistMethodAccuracy, avgDistMethodAccuracy, flush=True)
 
-            accuracy = float(totalCorrect) / float(total)
+            countMethodAccuracy = float(totalCorrectCountMethod) / float(total)
+            minDistMethodAccuracy = float(totalCorrectMinDistMethod) / float(total)
+            avgDistMethodAccuracy = float(totalCorrectAvgDistMethod) / float(total)
 
-            print(f"Accuracy with neighbors {neigbors} is {accuracy}", flush=True)
+            print(f"Accuracy with neighbors {neigbors} is count: {countMethodAccuracy}, minDist: {minDistMethodAccuracy}, avgDist: {avgDistMethodAccuracy}", flush=True)
 
-        return accuracy
-
-
-
-def globalGenerateFinalTestImage(width, height, parameters, imageId, dir):
-    augmentation =  iaa.Sequential([
-            iaa.Affine(
-                scale=(parameters["finalTestAugmentation"]["minScale"], parameters["finalTestAugmentation"]["maxScale"]),
-                translate_percent=(parameters["finalTestAugmentation"]["minTranslate"], parameters["finalTestAugmentation"]["maxTranslate"]),
-                cval=255),
-            iaa.GaussianBlur(sigma=(parameters["finalTestAugmentation"]["minGaussianBlur"], parameters["finalTestAugmentation"]["maxGaussianBlur"])),
-            iaa.MotionBlur(k=(parameters["finalTestAugmentation"]["minMotionBlur"], parameters["finalTestAugmentation"]["maxMotionBlur"]))
-        ])
-
-    image = generatePillImage()
-    image = skimage.transform.resize(image, (width, height, 3), mode='reflect', anti_aliasing=True)
-
-    dbImages = []
-    for rotation in range(0, 360, parameters['finalTestRotationIncrement']):
-        dbImages.append(skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1))
-
-    testImages = []
-    for n in range(parameters['finalTestAugmentationsPerImage']):
-        rotated = skimage.transform.rotate(image, angle=random.randint(0, 360), mode='constant', cval=1)
-        augmented = augmentation.augment_images(numpy.array([rotated]) * 255.0)[0]
-        augmented /= 255.0
-
-        # Now we make the query rotations
-        testRotations = []
-        for rotation in range(0, 360, parameters['finalTestQueryRotationIncrement']):
-            rotated = skimage.transform.rotate(augmented, angle=rotation, mode='constant', cval=1)
-            testRotations.append(rotated)
-        testImages.append(testRotations)
-
-    data = (imageId, dbImages, testImages)
-    return data
+        return countMethodAccuracy
 
 
+
+class CustomTensorBoard(TensorBoard):
+  """Extends the TensorBoard callback to allow adding custom summaries.
+
+
+  Arguments:
+      user_defined_freq: frequency (in epochs) at which to compute summaries
+          defined by the user by calling tf.summary in the model code. If set to
+          0, user-defined summaries won't be computed. Validation data must be
+          specified for summary visualization.
+      kwargs: Passed to tf.keras.callbacks.TensorBoard.
+  """
+
+
+  def __init__(self, user_defined_freq=0, **kwargs):
+    self.user_defined_freq = user_defined_freq
+    super(CustomTensorBoard, self).__init__(**kwargs)
+
+
+  def on_epoch_begin(self, epoch, logs=None):
+    """Add user-def. op to Model eval_function callbacks, reset batch count."""
+
+
+    # check if histogram summary should be run for this epoch
+    if self.user_defined_freq and epoch % self.user_defined_freq == 0:
+      self._epoch = epoch
+      # pylint: disable=protected-access
+      # add the user-defined summary ops if it should run this epoch
+      self.model._make_eval_function()
+      if self.merged not in self.model._eval_function.fetches:
+        self.model._eval_function.fetches.append(self.merged)
+        self.model._eval_function.fetch_callbacks[
+            self.merged] = self._fetch_callback
+      # pylint: enable=protected-access
+
+
+    super(CustomTensorBoard, self).on_epoch_begin(epoch, logs=None)
+
+
+  def on_epoch_end(self, epoch, logs=None):
+    """Checks if summary ops should run next epoch, logs scalar summaries."""
+
+
+    # pop the user-defined summary op after each epoch
+    if self.user_defined_freq:
+      # pylint: disable=protected-access
+      if self.merged in self.model._eval_function.fetches:
+        self.model._eval_function.fetches.remove(self.merged)
+      if self.merged in self.model._eval_function.fetch_callbacks:
+        self.model._eval_function.fetch_callbacks.pop(self.merged)
+      # pylint: enable=protected-access
+
+
+    super(CustomTensorBoard, self).on_epoch_end(epoch, logs=logs)

@@ -40,7 +40,7 @@ class Dataset:
         ])
 
         augmentations = []
-        images = self._getRawPillImages(self.params['neuralNetwork']['augmentationsPerImage'])
+        images = self._getRawPillImages(self.params['neuralNetwork']['augmentationsPerImage'], imageId)
         for n, image in enumerate(images):
             anchor = self._applyPreprocessing(image)
 
@@ -57,7 +57,7 @@ class Dataset:
 
         return result
 
-    def getRotationTestingImageSet(self):
+    def getRotationTestingImageSet(self, imageId):
         """
             This method returns a set of pill images that are to be used for basic rotation testing.
             There is an original 'anchor' image that is put into the db, and then multiple
@@ -65,7 +65,7 @@ class Dataset:
 
             :return: (baseImage, rotatedImages)
         """
-        image = self._getRawPillImages(1)[0]
+        image = self._getRawPillImages(1, imageId)[0]
 
         testRotations = self.params['rotationsToTest']
 
@@ -75,20 +75,34 @@ class Dataset:
 
         return image, testRotated
 
+    def getFinalTestingImageSet(self, imageId):
+        self.setRotationParams(0, 360)
+        self.params["generateAugmentation"]["minRotation"] = 0
+        self.params["generateAugmentation"]["maxRotation"] = 360
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId)
 
-    def getFinalTestingImageSet(self):
-        """
-            This method returns a set of pill images that are to be used for final testing. There is an
-            original 'anchor' image that is put into the db, and then multiple 'testing' images
-            with various levels of augmentation.
+        dbImages = []
+        for dbImage in rawImages[:self.params["finalTestDBAugmentations"]]:
+            dbImage = skimage.transform.resize(dbImage, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
+            for rotation in range(0, 360, self.params['finalTestRotationIncrement']):
+                dbImages.append(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1))
 
-            :return:
-        """
+        testImages = []
+        for image in rawImages[self.params["finalTestDBAugmentations"]:]:
+            image = skimage.transform.resize(image, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
 
-        pass
+            # Now we make the query rotations
+            testRotations = []
+            for rotation in range(0, 360, self.params['finalTestQueryRotationIncrement']):
+                rotated = skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1)
+                testRotations.append(rotated)
+            testImages.append(testRotations)
+
+        data = (imageId, dbImages, testImages)
+        return data
 
 
-    def _getRawPillImages(self, count):
+    def _getRawPillImages(self, count, imageId):
         """ This method is meant to be implemented by subclasses. It should return multiple available
             raw pill images, as it would appear if a user took it from their camera.
         """
@@ -141,7 +155,7 @@ class Dataset:
 
     def generateExamples(self, save=True, show=False):
         for n in range(5):
-            images = self._getRawPillImages(5)
+            images = self._getRawPillImages(5, n)
 
             for imageIndex, image in enumerate(images):
                 plt.imshow(image, interpolation='lanczos')
@@ -161,7 +175,7 @@ class Dataset:
                     plt.show()
 
         for n in range(3):
-            base, rotations = self.getRotationTestingImageSet()
+            base, rotations = self.getRotationTestingImageSet(n)
 
             plt.imshow(base, interpolation='lanczos')
             plt.savefig('testing-' + str(n) + "-base.png")

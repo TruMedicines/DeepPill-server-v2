@@ -2,6 +2,28 @@
   "hyperparameters": {
     "type": "object",
     "properties": {
+      "startingWeights": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "string",
+                "constant": "imagenet"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "string",
+                "constant": "none"
+              }
+            }
+          }
+        ]
+      },
       "neuralNetwork": {
         "type": "object",
         "properties": {
@@ -28,7 +50,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-4,
+                    "min": 1e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   },
@@ -49,7 +71,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-4,
+                    "min": 1e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   },
@@ -70,7 +92,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-4,
+                    "min": 1e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   },
@@ -91,7 +113,7 @@
                   },
                   "learningRate": {
                     "type": "number",
-                    "min": 1e-4,
+                    "min": 1e-6,
                     "max": 5e-3,
                     "scaling": "logarithmic"
                   },
@@ -166,7 +188,7 @@
     "graphs": false
   },
   "ui": {
-    "enabled": true
+    "enabled": false
   },
   "function": {
     "type": "remote",
@@ -181,8 +203,11 @@
     "auto_kill_loss": 1
   },
   "search": {
-    "method": "atpe",
-    "iterations": 1000
+    "method": "abh",
+    "iterations": 1000,
+    "min_budget": 5,
+    "max_budget": 20,
+    "eta": 2
   }
 }
 

@@ -1,26 +1,19 @@
 {
   "trainingAugmentation": {
-    "gaussianNoise": 0.339835624747714,
-    "minRotation": 25,
-    "maxRotation": 50,
-    "piecewiseAffine": 0.006345186964944,
-    "rotationEasing": {
-      "easing": "epoch",
-      "minRotationEasing": 0.030,
-      "maxRotationEasing": 0.001
-    }
+    "gaussianNoise": 0.10
   },
   "neuralNetwork": {
-    "core": "inceptionnet",
-    "denseLayerMultiplier": 4.41838699378209,
-    "dropoutRate": 0.451472467407633,
     "optimizer": {
-      "optimizerName": "rmsprop",
-      "learningRate": 0.000115659763457,
-      "learningRateDecay": 0.95,
-      "pretrainLearningRate": 0.000615659763457
+      "optimizerName": "nadam",
+      "learningRate": 0.0005077669948052629,
+      "learningRateDecay": 0.85
     },
-    "vectorSize": 1024
+   "lossMode": "hard",
+   "lossMargin": 0.40
+  },
+  "preprocessing": {
+    "detectCircle": "false",
+    "edgeDetection": {"enabled": "false", "threshold": 200}
   },
   "startingWeights": {
     "pretrainPercent": 0,

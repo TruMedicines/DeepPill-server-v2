@@ -1,4 +1,5 @@
 import generated_dataset
+import loaded_dataset
 from model import PillRecognitionModel
 import json
 import sys
@@ -16,6 +17,6 @@ mergedParameters = defaultParameters
 merge(parameters, mergedParameters)
 
 
-dataset = generated_dataset.GeneratedDataset(mergedParameters)
+dataset = loaded_dataset.LoadedDataset(mergedParameters)
 
 dataset.generateExamples()

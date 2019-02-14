@@ -40,7 +40,7 @@
                    "vectorSize": 1024,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 10,
+                   "epochs": 100,
                    "lossMode": "all",
                    "lossMargin": 0.3
    },
@@ -55,8 +55,8 @@
     "maxTranslate": 0.1,
     "minGaussianBlur": 0,
     "maxGaussianBlur": 1,
-    "minMotionBlur": 5,
-    "maxMotionBlur": 11,
+    "minMotionBlur": 3,
+    "maxMotionBlur": 5,
     "minRotation": 0,
     "maxRotation": 1,
     "minShear": -12,
@@ -66,25 +66,44 @@
     "minBrightness": -8,
     "maxBrightness": 5
   },
+  "loadAugmentation": {
+    "minScale": 0.85,
+    "maxScale": 1.0,
+    "minTranslate": -0.1,
+    "maxTranslate": 0.1,
+    "minGaussianBlur": 0,
+    "maxGaussianBlur": 1,
+    "minMotionBlur": 3,
+    "maxMotionBlur": 5,
+    "minRotation": 0,
+    "maxRotation": 1,
+    "minShear": -12,
+    "maxShear": 12,
+    "minContrast": 0.9,
+    "maxContrast": 1.1,
+    "minBrightness": -5,
+    "maxBrightness": 1
+  },
   "preprocessing": {
     "detectCircle": "false",
     "edgeDetection": {"enabled": "false", "threshold": 200}
   },
   "trainingAugmentation": {
     "gaussianNoise": 0.15,
-    "minRotation": 25,
-    "maxRotation": 50,
+    "minRotation": 0,
+    "maxRotation": 360,
     "piecewiseAffine": 0.006345186964944,
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",
-      "minRotationEasing": 3.0,
-      "maxRotationEasing": 0.1
+      "minRotationEasing": 0.01,
+      "maxRotationEasing": 0.20
     }
   },
   "finalTestPrintEvery": 100,
-  "finalTestImages": 5000,
-  "finalTestRotationIncrement": 3,
+  "finalTestImages": 1000,
+  "finalTestRotationIncrement": 30,
+  "finalTestDBAugmentations": 8,
   "finalTestAugmentationsPerImage": 8,
   "finalTestQueryRotationIncrement": 15,
   "finalTestAugmentation": {

@@ -28,20 +28,20 @@ class GeneratedDataset(Dataset):
 
         self.params = params
 
-    def _getRawPillImages(self, count):
+    def _getRawPillImages(self, count, imageId):
         mainAugmentation = iaa.Sequential([
             iaa.Affine(
                 scale=(self.params["generateAugmentation"]["minScale"], self.params["generateAugmentation"]["maxScale"]),
                 translate_percent=(self.params["generateAugmentation"]["minTranslate"], self.params["generateAugmentation"]["maxTranslate"]),
                 shear=(self.params["generateAugmentation"]["minShear"], self.params["generateAugmentation"]["maxShear"]),
-                cval=255),
-            iaa.GaussianBlur(sigma=(self.params["generateAugmentation"]["minGaussianBlur"], self.params["generateAugmentation"]["maxGaussianBlur"])),
-            iaa.MotionBlur(k=(self.params["generateAugmentation"]["minMotionBlur"], self.params["generateAugmentation"]["maxMotionBlur"]))
+                cval=255)
         ])
 
         secondAugmentation = iaa.Sequential([
             iaa.GammaContrast(gamma=(self.params["generateAugmentation"]["minContrast"], self.params["generateAugmentation"]["maxContrast"])),
-            iaa.Add((self.params["generateAugmentation"]["minBrightness"], self.params["generateAugmentation"]["maxBrightness"]))
+            iaa.Add((self.params["generateAugmentation"]["minBrightness"], self.params["generateAugmentation"]["maxBrightness"])),
+            iaa.GaussianBlur(sigma=(self.params["generateAugmentation"]["minGaussianBlur"], self.params["generateAugmentation"]["maxGaussianBlur"])),
+            iaa.MotionBlur(k=(self.params["generateAugmentation"]["minMotionBlur"], self.params["generateAugmentation"]["maxMotionBlur"]))
         ])
 
         anchor = self._generateRawPillImage()
@@ -53,6 +53,7 @@ class GeneratedDataset(Dataset):
                                                        mode='constant', cval=1)
             anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
             anchorAugmented = anchorAugmented / 255.0
+            anchorAugmented = numpy.maximum(0, anchorAugmented)
 
             anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
             anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
