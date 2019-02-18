@@ -5,8 +5,8 @@
   "neuralNetwork": {
     "optimizer": {
       "optimizerName": "nadam",
-      "learningRate": 0.0005077669948052629,
-      "learningRateDecay": 0.85
+      "learningRate": 0.0001077669948052629,
+      "learningRateDecay": 0.95
     },
    "lossMode": "hard",
    "lossMargin": 0.40

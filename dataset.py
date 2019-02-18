@@ -36,6 +36,7 @@ class Dataset:
         """
         noiseAugmentation = iaa.Sequential([
             iaa.PiecewiseAffine(self.params["trainingAugmentation"]["piecewiseAffine"]),
+            # iaa.AddToHueAndSaturation((self.params["trainingAugmentation"]["minHueShift"], self.params["trainingAugmentation"]["maxHueShift"])),
             iaa.AdditiveGaussianNoise(scale=self.params["trainingAugmentation"]["gaussianNoise"] * 255)
         ])
 
@@ -46,6 +47,9 @@ class Dataset:
 
             rotationDirection = random.choice([-1, +1])
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.currentMinRotation / 2, self.currentMaxRotation / 2) * rotationDirection, mode='constant', cval=0)
+
+            anchorAugmented = numpy.maximum(numpy.zeros_like(anchorAugmented), anchorAugmented)
+            anchorAugmented = numpy.minimum(numpy.ones_like(anchorAugmented), anchorAugmented)
 
             anchorAugmented = noiseAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0] / 255.0
 

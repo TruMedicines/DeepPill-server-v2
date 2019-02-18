@@ -17,6 +17,6 @@ mergedParameters = defaultParameters
 merge(parameters, mergedParameters)
 
 
-dataset = loaded_dataset.LoadedDataset(mergedParameters)
+dataset = generated_dataset.GeneratedDataset(mergedParameters)
 
 dataset.generateExamples()

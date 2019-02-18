@@ -9,11 +9,7 @@
     250,
     500,
     750,
-    1000,
-    1250,
-    1500,
-    1750,
-    2000
+    1000
   ],
   "rotationsToTest": [
     5,
@@ -27,8 +23,8 @@
   "numGPUs": 1,
   "enableTensorboard": false,
   "imageGenerationWorkers": 2,
-   "neuralNetwork": {"batchSize": 8.0,
-                   "augmentationsPerImage": 3,
+   "neuralNetwork": {"batchSize": 16.0,
+                   "augmentationsPerImage": 4,
                    "core": "inceptionnet",
                    "denseLayerMultiplier": 4,
                    "dropoutRate": 0.45,
@@ -56,7 +52,7 @@
     "minGaussianBlur": 0,
     "maxGaussianBlur": 1,
     "minMotionBlur": 3,
-    "maxMotionBlur": 5,
+    "maxMotionBlur": 8,
     "minRotation": 0,
     "maxRotation": 1,
     "minShear": -12,
@@ -67,14 +63,14 @@
     "maxBrightness": 5
   },
   "loadAugmentation": {
-    "minScale": 0.85,
+    "minScale": 0.8,
     "maxScale": 1.0,
     "minTranslate": -0.1,
     "maxTranslate": 0.1,
     "minGaussianBlur": 0,
     "maxGaussianBlur": 1,
     "minMotionBlur": 3,
-    "maxMotionBlur": 5,
+    "maxMotionBlur": 8,
     "minRotation": 0,
     "maxRotation": 1,
     "minShear": -12,
@@ -85,7 +81,7 @@
     "maxBrightness": 1
   },
   "preprocessing": {
-    "detectCircle": "false",
+    "detectCircle": "true",
     "edgeDetection": {"enabled": "false", "threshold": 200}
   },
   "trainingAugmentation": {
@@ -93,6 +89,8 @@
     "minRotation": 0,
     "maxRotation": 360,
     "piecewiseAffine": 0.006345186964944,
+    "minHueShift": 25,
+    "maxHueShift": 25,
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",
@@ -103,7 +101,7 @@
   "finalTestPrintEvery": 100,
   "finalTestImages": 1000,
   "finalTestRotationIncrement": 30,
-  "finalTestDBAugmentations": 8,
+  "finalTestDBAugmentations": 1,
   "finalTestAugmentationsPerImage": 8,
   "finalTestQueryRotationIncrement": 15,
   "finalTestAugmentation": {

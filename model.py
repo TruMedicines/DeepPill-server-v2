@@ -42,10 +42,11 @@ from keras.backend.tensorflow_backend import set_session
 import datetime
 
 class PillRecognitionModel:
-    def __init__(self, parameters, dataset):
+    def __init__(self, parameters, generatedDataset, realDataset):
         self.parameters = parameters
 
-        self.dataset = dataset
+        self.generatedDataset = generatedDataset
+        self.realDataset = realDataset
 
         self.workers = int(psutil.cpu_count()*0.7)
 
@@ -87,7 +88,8 @@ class PillRecognitionModel:
         self.maxImagesToGenerate = 100
         self.imageGenerationManager = multiprocessing.Manager()
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
-        self.augmentedImages = []
+        self.augmentedRealImages = []
+        self.augmentedGeneratedImages = []
         self.imageGenerationThreads = []
         self.imageListLock = threading.Lock()
         self.augmentedTripletListLock = threading.Lock()
@@ -121,19 +123,28 @@ class PillRecognitionModel:
                     imageId = self.imageId
                     self.imageId += 1
 
-                if self.imageId % 100 == 0:
+                if imageId % 100 == 0:
                     self.imageGenerationExecutor.shutdown(wait=False)
                     self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
 
-                self.dataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                if imageId % 2 == 0:
+                    self.generatedDataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                    future = self.imageGenerationExecutor.submit(self.generatedDataset.getTrainingImageSet, imageId)
+                    triplet = future.result()
 
-                future = self.imageGenerationExecutor.submit(self.dataset.getTrainingImageSet, imageId)
-                triplet = future.result()
+                    with self.augmentedTripletListLock:
+                        self.augmentedGeneratedImages.append(triplet)
+                        if len(self.augmentedGeneratedImages) >= self.maxImagesToGenerate:
+                            del self.augmentedGeneratedImages[0]
+                else:
+                    self.realDataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                    future = self.imageGenerationExecutor.submit(self.realDataset.getTrainingImageSet, imageId)
+                    triplet = future.result()
 
-                with self.augmentedTripletListLock:
-                    self.augmentedImages.append(triplet)
-                    if len(self.augmentedImages) >= self.maxImagesToGenerate:
-                        del self.augmentedImages[0]
+                    with self.augmentedTripletListLock:
+                        self.augmentedRealImages.append(triplet)
+                        if len(self.augmentedRealImages) >= self.maxImagesToGenerate:
+                            del self.augmentedRealImages[0]
                 if not self.running or self.measuringAccuracy:
                     time.sleep(1.0)
             except OSError as e:
@@ -234,24 +245,34 @@ class PillRecognitionModel:
         return triplet_loss
 
     def generateBatch(self, testing=False):
+        batchNumber = 0
         while True:
+            batchNumber += 1
+
             # Generate half the batch as negative examples, half the batch as positive examples
             inputs = []
             outputs = []
 
-            triplets = random.sample(range(min(len(self.augmentedImages)-1, self.maxImagesToGenerate-1)), min(len(self.augmentedImages)-1, int(self.parameters['neuralNetwork']['batchSize'])))
+            if batchNumber % 2 == 0 and batchNumber > 500:
+                triplets = random.sample(range(min(len(self.augmentedRealImages)-1, self.maxImagesToGenerate-1)), min(len(self.augmentedRealImages)-1, int(self.parameters['neuralNetwork']['batchSize'])))
+                augmentedImages = self.augmentedRealImages
+            else:
+                triplets = random.sample(range(min(len(self.augmentedGeneratedImages)-1, self.maxImagesToGenerate-1)), min(len(self.augmentedGeneratedImages)-1, int(self.parameters['neuralNetwork']['batchSize'])))
+                augmentedImages = self.augmentedGeneratedImages
 
             # Add each image into the batch
             for n in range(int(self.parameters['neuralNetwork']['batchSize'])):
-                tripletInputs = self.augmentedImages[triplets[n]]
+                tripletInputs = augmentedImages[triplets[n]]
 
                 for input in range(self.parameters['neuralNetwork']['augmentationsPerImage']):
                     inputs.append(tripletInputs[input])
                     outputs.append(numpy.ones(self.parameters['neuralNetwork']['vectorSize']))
 
             # Add in blends to the batch
+            inputs = numpy.array(inputs)
+            outputs = numpy.array(outputs)
 
-            yield numpy.array(inputs), numpy.array(outputs)
+            yield inputs, outputs
 
     def loadModel(self, fileName):
         self.model, imageNet = self.createCoreModel()
@@ -285,7 +306,7 @@ class PillRecognitionModel:
             imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
             imageNet.add(BatchNormalization())
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], activity_regularizer=l2(1e-5)))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], activity_regularizer=l2(1e-7)))
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
@@ -485,7 +506,7 @@ class PillRecognitionModel:
                 futures = []
                 with concurrent.futures.ProcessPoolExecutor(max_workers=self.workers) as worker:
                     for n in range(int(maxDatasetSize/25)):
-                        futures.append(worker.submit(self.dataset.getRotationTestingImageSet, imageId))
+                        futures.append(worker.submit(self.realDataset.getRotationTestingImageSet, imageId))
                         imageId += 1
 
                     for future in concurrent.futures.as_completed(futures):
@@ -615,14 +636,14 @@ class PillRecognitionModel:
                 imageId = currentImageId
                 currentImageId += 1
 
-                result = self.dataset.getFinalTestingImageSet(imageId)
-
-                if not os.path.exists(f"data/images/{imageId}"):
-                    os.mkdir(f"data/images/{imageId}")
-
+                result = self.generatedDataset.getFinalTestingImageSet(imageId)
+                
                 imageId = result[0]
                 dbImages = result[1]
                 testImages = result[2]
+
+                if not os.path.exists(f"data/images/{imageId}"):
+                    os.mkdir(f"data/images/{imageId}")
 
                 for imageIndex, image in enumerate(dbImages):
                     skimage.io.imsave(f"data/images/{imageId}/db-{imageIndex}.png", image)

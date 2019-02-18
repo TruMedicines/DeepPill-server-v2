@@ -51,6 +51,8 @@ class GeneratedDataset(Dataset):
             rotationDirection = random.choice([-1, +1])
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["generateAugmentation"]["minRotation"] / 2, self.params["generateAugmentation"]["maxRotation"] / 2) * rotationDirection,
                                                        mode='constant', cval=1)
+            anchorAugmented = numpy.maximum(0, anchorAugmented)
+
             anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
             anchorAugmented = anchorAugmented / 255.0
             anchorAugmented = numpy.maximum(0, anchorAugmented)
@@ -174,6 +176,21 @@ class GeneratedDataset(Dataset):
         splotchMask[:, :, 0] = splotchMaskPattern[:width, :height]
         splotchMask = scipy.ndimage.filters.gaussian_filter(splotchMask, 0.6, order=0)
 
+        splotchColor = random.choice(['red', 'green', 'blue', 'yellow'])
+
+        if splotchColor == 'red':
+            splotchUpperColor = np.array((181, 67, 10))
+            splotchLowerColor = np.array((170, 12, 12))
+        elif splotchColor == 'green':
+            splotchUpperColor = np.array((37, 227, 4))
+            splotchLowerColor = np.array((64, 252, 45))
+        elif splotchColor == 'blue':
+            splotchUpperColor = np.array((88, 82, 237))
+            splotchLowerColor = np.array((117, 112, 240))
+        elif splotchColor == 'yellow':
+            splotchUpperColor = np.array((242, 248, 5))
+            splotchLowerColor = np.array((251, 255, 50))
+
         backgroundTexture = np.zeros((width, height, 3))
         backgroundPattern = np.zeros((width, height, 1))
         backgroundPattern[:, :, 0] = self._generatePerlinNoise2d((width, height), (16, 16))
@@ -192,8 +209,8 @@ class GeneratedDataset(Dataset):
         splotchPattern[:, :, 0] = self._generatePerlinNoise2d((width, height), (16, 16))
         splotchColor1 = np.zeros((width, height, 3))
         splotchColor2 = np.zeros((width, height, 3))
-        splotchColor1[:, :] = np.array((181, 67, 10)) / 256.0
-        splotchColor2[:, :] = np.array((170, 12, 12)) / 256.0
+        splotchColor1[:, :] = splotchUpperColor / 256.0
+        splotchColor2[:, :] = splotchLowerColor / 256.0
         splotchTexture[:, :] = splotchPattern * splotchColor1 + (1.0 - splotchPattern) * splotchColor2
 
         imageData = splotchMask * splotchTexture + (1.0 - splotchMask) * backgroundTexture

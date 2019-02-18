@@ -20,7 +20,7 @@ import cv2
 from dataset import Dataset
 import textures
 import skimage.io
-
+import concurrent.futures
 
 class LoadedDataset(Dataset):
     """ This class is responsible for creating the generated dataset for the core algorithm. """
@@ -30,10 +30,65 @@ class LoadedDataset(Dataset):
 
         self.params = params
 
-        self.rawImages = []
+    @staticmethod
+    def loadImages():
+        images = []
 
-        for file in os.listdir('test-images'):
-            self.rawImages.append(skimage.transform.resize(cv2.imread(f"test-images/{file}"), output_shape=(256, 256)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            futures = []
+            for file in sorted(os.listdir('test-images')):
+                if file.endswith("-cropped.png"):
+                    continue
+
+                fileName = f"test-images/{file}"
+
+                futures.append(executor.submit(LoadedDataset.loadAndConvertImageFile, fileName))
+
+            images = [future.result() for future in concurrent.futures.as_completed(futures) if future.result() is not None]
+
+        random.shuffle(images)
+
+        return images
+
+    @staticmethod
+    def loadAndConvertImageFile(fileName):
+        image = skimage.io.imread(fileName)
+        # image = numpy.flip(image, 0)
+        # image = numpy.flip(image, 1)
+
+        width = image.shape[1]
+        height = image.shape[0]
+
+        image = skimage.transform.resize(image, output_shape=(256, int(float(width) / float(height) * 256)))
+
+        width = image.shape[1]
+
+        grey = cv2.cvtColor(numpy.array(image * 255.0, dtype=numpy.uint8), cv2.COLOR_BGR2GRAY)
+        circles = cv2.HoughCircles(grey, cv2.HOUGH_GRADIENT, 1, width, param1=50, param2=25, minRadius=int(width / 5), maxRadius=int(width / 2))
+
+        if circles is None:
+            print(f"Error on image {file}")
+            return None
+
+        cropCircle = circles[0][0]
+
+        mask = numpy.zeros((image.shape[0], image.shape[1], 3), dtype=numpy.uint8)
+        rr, cc = skimage.draw.circle(cropCircle[1], cropCircle[0], cropCircle[2], shape=(image.shape[0], image.shape[1]))
+        mask[rr, cc, :] = 1
+        image = image * mask
+        image = image + (1.0 - mask)
+
+        radius = cropCircle[2] * 1.1
+
+        cropTop = max(0, int(cropCircle[1] - radius))
+        cropBottom = min(int(cropCircle[1] + radius), image.shape[0])
+        cropLeft = max(0, int(cropCircle[0] - radius))
+        cropRight = min(int(cropCircle[0] + radius), image.shape[1])
+
+        cropped = image[cropTop:cropBottom, cropLeft:cropRight]
+        cropped = skimage.transform.resize(cropped, output_shape=(256, 256))
+
+        return cropped
 
     def _getRawPillImages(self, count, imageId):
         mainAugmentation = iaa.Sequential([
@@ -51,7 +106,7 @@ class LoadedDataset(Dataset):
             iaa.MotionBlur(k=(self.params["loadAugmentation"]["minMotionBlur"], self.params["loadAugmentation"]["maxMotionBlur"]))
         ])
 
-        anchor = self.rawImages[imageId % len(self.rawImages)]
+        anchor = LoadedDataset.rawImages[imageId % len(self.rawImages)]
 
         augmentations = []
         for n in range(count):
@@ -74,3 +129,5 @@ class LoadedDataset(Dataset):
 
             augmentations.append(anchorAugmented)
         return augmentations
+
+LoadedDataset.rawImages = LoadedDataset.loadImages()

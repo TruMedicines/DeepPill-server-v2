@@ -18,9 +18,7 @@ merge(parameters, mergedParameters)
 
 print("Training model with the following parameters")
 pprint(mergedParameters)
-dataset = GeneratedDataset(mergedParameters)
-# dataset = LoadedDataset(mergedParameters)
-model = PillRecognitionModel(mergedParameters, dataset)
+model = PillRecognitionModel(mergedParameters, GeneratedDataset(mergedParameters), LoadedDataset(mergedParameters))
 model.trainModel()
 
 

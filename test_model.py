@@ -19,8 +19,7 @@ merge(parameters, mergedParameters)
 
 print("Training model with the following parameters")
 pprint(mergedParameters)
-dataset = GeneratedDataset(mergedParameters)
-model = PillRecognitionModel(mergedParameters, dataset)
+model = PillRecognitionModel(mergedParameters, GeneratedDataset(mergedParameters), LoadedDataset(mergedParameters))
 
 model.loadModel(sys.argv[2])
 # model.measureAccuracy(model.model)
