@@ -89,8 +89,8 @@
     "minRotation": 0,
     "maxRotation": 360,
     "piecewiseAffine": 0.006345186964944,
-    "minHueShift": 25,
-    "maxHueShift": 25,
+    "coarseDropoutSize": 0.04,
+    "coarseDropoutProbability": 0.20,
     "rotationEasing": {
       "$index": 0,
       "easing": "epoch",

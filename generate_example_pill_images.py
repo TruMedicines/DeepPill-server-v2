@@ -1,5 +1,4 @@
 import generated_dataset
-import loaded_dataset
 from model import PillRecognitionModel
 import json
 import sys

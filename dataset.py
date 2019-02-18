@@ -37,7 +37,8 @@ class Dataset:
         noiseAugmentation = iaa.Sequential([
             iaa.PiecewiseAffine(self.params["trainingAugmentation"]["piecewiseAffine"]),
             # iaa.AddToHueAndSaturation((self.params["trainingAugmentation"]["minHueShift"], self.params["trainingAugmentation"]["maxHueShift"])),
-            iaa.AdditiveGaussianNoise(scale=self.params["trainingAugmentation"]["gaussianNoise"] * 255)
+            iaa.AdditiveGaussianNoise(scale=self.params["trainingAugmentation"]["gaussianNoise"] * 255),
+            iaa.CoarseDropout(p=self.params['trainingAugmentation']['coarseDropoutProbability'], size_percent=self.params['trainingAugmentation']['coarseDropoutSize'])
         ])
 
         augmentations = []
