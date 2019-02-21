@@ -95,7 +95,7 @@
       "$index": 0,
       "easing": "epoch",
       "minRotationEasing": 0.01,
-      "maxRotationEasing": 0.20
+      "maxRotationEasing": 0.02
     }
   },
   "finalTestPrintEvery": 100,

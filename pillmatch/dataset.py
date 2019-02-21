@@ -8,8 +8,9 @@ import numpy
 import sklearn
 import os
 import sklearn.preprocessing
-import textures
+from pillmatch import textures
 import cv2
+
 
 class Dataset:
     """ This class is responsible for providing the dataset which is used to train and test the core algorithm. """

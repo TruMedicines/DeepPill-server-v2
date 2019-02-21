@@ -4,16 +4,17 @@ import skimage.transform
 import skimage.io
 import skimage.util
 import numpy
+import pkg_resources
 
 textures = []
 
-dirs = os.listdir('Pixar 130 Library')
+dirs = pkg_resources.resource_listdir("pillmatch", 'background_images')
 for dir in dirs:
     if 'DS_Store' not in dir:
-        files = os.listdir(f'Pixar 130 Library/{dir}')
+        files = pkg_resources.resource_listdir("pillmatch", f'background_images/{dir}')
         for file in files:
             if '_Normal' not in file and '_Roughness' not in file and '.DS_Store' not in file:
-                image = skimage.io.imread(f'Pixar 130 Library/{dir}/{file}')
+                image = skimage.io.imread(pkg_resources.resource_filename("pillmatch", f'background_images/{dir}/{file}'))
 
                 image = skimage.transform.resize(image, (128, 128))
                 tiles = numpy.array([image, image, image, image, image, image, image, image, image])
@@ -34,3 +35,4 @@ for dir in dirs:
 
                         textures.append(cropped)
 
+pkg_resources.cleanup_resources()

@@ -17,7 +17,6 @@ from scipy.misc import imsave, imread
 import os
 import sklearn.metrics
 import numpy
-import textures
 import pickle
 import psutil
 import matplotlib.pyplot as plt

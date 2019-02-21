@@ -17,8 +17,8 @@ import skimage.draw
 import skimage.io
 import matplotlib.pyplot as plt
 import cv2
-from dataset import Dataset
-import textures
+from pillmatch.dataset import Dataset
+from pillmatch import textures
 import skimage.io
 import concurrent.futures
 
