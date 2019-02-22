@@ -107,6 +107,20 @@ class Dataset:
         data = (imageId, dbImages, testImages)
         return data
 
+    def getImageDBSet(self, imageId):
+        self.setRotationParams(0, 360)
+        self.params["generateAugmentation"]["minRotation"] = 0
+        self.params["generateAugmentation"]["maxRotation"] = 360
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId)
+
+        dbImages = []
+        for dbImage in rawImages[:self.params["finalTestDBAugmentations"]]:
+            dbImage = skimage.transform.resize(dbImage, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
+            for rotation in range(0, 360, self.params['finalTestRotationIncrement']):
+                dbImages.append(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1))
+
+        return dbImages
+
 
     def _getRawPillImages(self, count, imageId):
         """ This method is meant to be implemented by subclasses. It should return multiple available

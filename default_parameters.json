@@ -113,5 +113,8 @@
     "maxGaussianBlur": 1,
     "minMotionBlur": 5,
     "maxMotionBlur": 11
-  }
+  },
+  "azureStorageBucket": "pillimages",
+  "azureStorageKey": "j8/WRyKg4STU5h3RddQcq2QSjE1DiJDu18azIFt91ztOy50XKmLNo6th3Ee/3TsVAMQfe17nx+nSvDoH5Qr7Iw==",
+  "azureStorageUrl": "https://pillimages.blob.core.usgovcloudapi.net/images/"
 }
