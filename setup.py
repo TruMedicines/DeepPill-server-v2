@@ -20,9 +20,10 @@ setup(
         "hypermax",
         'lightgbm',
         "matplotlib",
-        "tensorflow-gpu",
+        # "tensorflow-gpu",
         "scikit-learn",
-        "keras"
+        "keras",
+        'azure-storage'
     ],
     classifiers=[
         'Intended Audience :: Education',
@@ -42,9 +43,10 @@ setup(
     zip_safe=False,
     entry_points={
         'console_scripts': [
-            'pm_test_model = pillmatch.bin.train_model:main',
-            'pm_train_model = pillmatch.bin.test_model:main',
-            'pm_prepare_db = pillmatch.bin.prepare_database:main',
+            'pm_api_server = pillmatch.bin.api_server:main',
+            'pm_test_model = pillmatch.bin.test_model:main',
+            'pm_train_model = pillmatch.bin.train_model:main',
+            'pm_prepare_database_vectors = pillmatch.bin.prepare_database_vectors:main',
             'pm_generate_example_pill_images = pillmatch.bin.generate_example_pill_images:main'
         ]
     }

@@ -130,4 +130,4 @@ class LoadedDataset(Dataset):
             augmentations.append(anchorAugmented)
         return augmentations
 
-LoadedDataset.rawImages = LoadedDataset.loadImages()
+# LoadedDataset.rawImages = LoadedDataset.loadImages()

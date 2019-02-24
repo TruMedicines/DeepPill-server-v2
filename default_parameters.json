@@ -99,7 +99,7 @@
     }
   },
   "finalTestPrintEvery": 100,
-  "finalTestImages": 1000,
+  "finalTestImages": 10,
   "finalTestRotationIncrement": 30,
   "finalTestDBAugmentations": 1,
   "finalTestAugmentationsPerImage": 8,
@@ -116,5 +116,6 @@
   },
   "azureStorageBucket": "pillimages",
   "azureStorageKey": "j8/WRyKg4STU5h3RddQcq2QSjE1DiJDu18azIFt91ztOy50XKmLNo6th3Ee/3TsVAMQfe17nx+nSvDoH5Qr7Iw==",
-  "azureStorageUrl": "https://pillimages.blob.core.usgovcloudapi.net/images/"
+  "azureStorageUrl": "https://pillimages.blob.core.usgovcloudapi.net/images/",
+  "azureEndpointSuffix": "core.usgovcloudapi.net"
 }
