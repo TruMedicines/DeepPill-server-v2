@@ -28,7 +28,6 @@ matcher.trainNearestNeighborModel()
 
 test = numpy.ones(shape=(224, 224, 3))
 match = matcher.findMatchForImage(test) # this is used to warm up the server
-print(match)
 print("Ready")
 
 @app.route("/ImageSearch", methods=['GET', 'POST'])

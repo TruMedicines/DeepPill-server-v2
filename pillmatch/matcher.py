@@ -114,8 +114,6 @@ class Matcher:
 
         testRotations = numpy.array(testRotations)
 
-        print(testRotations)
-
         vectors = self.model.model.predict(testRotations)
         vectors = sklearn.preprocessing.normalize(vectors)
 
