@@ -18,8 +18,10 @@ setup(
     },
     install_requires=[
         "hypermax",
+        "gunicorn",
         'lightgbm',
         "matplotlib",
+        "Flask",
         # "tensorflow-gpu",
         "scikit-learn",
         "keras",

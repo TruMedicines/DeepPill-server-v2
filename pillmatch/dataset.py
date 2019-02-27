@@ -39,7 +39,7 @@ class Dataset:
             iaa.PiecewiseAffine(self.params["trainingAugmentation"]["piecewiseAffine"]),
             # iaa.AddToHueAndSaturation((self.params["trainingAugmentation"]["minHueShift"], self.params["trainingAugmentation"]["maxHueShift"])),
             iaa.AdditiveGaussianNoise(scale=self.params["trainingAugmentation"]["gaussianNoise"] * 255),
-            iaa.CoarseDropout(p=self.params['trainingAugmentation']['coarseDropoutProbability'], size_percent=self.params['trainingAugmentation']['coarseDropoutSize'])
+            # iaa.CoarseDropout(p=self.params['trainingAugmentation']['coarseDropoutProbability'], size_percent=self.params['trainingAugmentation']['coarseDropoutSize'])
         ])
 
         augmentations = []
@@ -111,7 +111,7 @@ class Dataset:
         self.setRotationParams(0, 360)
         self.params["generateAugmentation"]["minRotation"] = 0
         self.params["generateAugmentation"]["maxRotation"] = 360
-        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId)
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId, applyAugmentations=False)
 
         dbImages = []
         for dbImage in rawImages[:self.params["finalTestDBAugmentations"]]:
@@ -122,7 +122,7 @@ class Dataset:
         return dbImages
 
 
-    def _getRawPillImages(self, count, imageId):
+    def _getRawPillImages(self, count, imageId, applyAugmentations=True):
         """ This method is meant to be implemented by subclasses. It should return multiple available
             raw pill images, as it would appear if a user took it from their camera.
         """

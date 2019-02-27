@@ -90,7 +90,7 @@ class LoadedDataset(Dataset):
 
         return cropped
 
-    def _getRawPillImages(self, count, imageId):
+    def _getRawPillImages(self, count, imageId, applyAugmentations=True):
         mainAugmentation = iaa.Sequential([
             iaa.Affine(
                 scale=(self.params["loadAugmentation"]["minScale"], self.params["loadAugmentation"]["maxScale"]),
@@ -114,20 +114,22 @@ class LoadedDataset(Dataset):
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["generateAugmentation"]["minRotation"] / 2,
                                                                                     self.params["generateAugmentation"]["maxRotation"] / 2) * rotationDirection,
                                                        mode='constant', cval=1)
-            anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
-            anchorAugmented = anchorAugmented / 255.0
-            anchorAugmented = numpy.maximum(0, anchorAugmented)
+            if applyAugmentations:
+                anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
+                anchorAugmented = anchorAugmented / 255.0
+                anchorAugmented = numpy.maximum(0, anchorAugmented)
 
-            anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
-            anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
+                anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
+                anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
 
-            randomTexture = random.choice(textures.textures)
-            anchorAugmented = anchorWhiteMask * randomTexture + (1.0 - anchorWhiteMask) * anchorAugmented
+                randomTexture = random.choice(textures.textures)
+                anchorAugmented = anchorWhiteMask * randomTexture + (1.0 - anchorWhiteMask) * anchorAugmented
 
-            anchorAugmented = secondAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
-            anchorAugmented = anchorAugmented / 255.0
+                anchorAugmented = secondAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
+                anchorAugmented = anchorAugmented / 255.0
 
             augmentations.append(anchorAugmented)
+
         return augmentations
 
-# LoadedDataset.rawImages = LoadedDataset.loadImages()
+LoadedDataset.rawImages = LoadedDataset.loadImages()
