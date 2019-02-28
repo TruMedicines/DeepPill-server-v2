@@ -61,7 +61,7 @@ class PillRecognitionModel:
         if parameters['numGPUs'] == -1:
             self.numGPUs = len(self.getAvailableGpus())
         else:
-            self.numGPUs = parameters['numGPUs']
+            self.numGPUs = min(parameters['numGPUs'], len(self.getAvailableGpus()))
 
         self.trainingBatchNumber = multiprocessing.Value('i', 0)
         self.trainingBatchNumberLock = multiprocessing.Lock()

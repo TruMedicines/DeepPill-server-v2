@@ -27,6 +27,8 @@ class Matcher:
 
 
     def createVectorsFile(self):
+        self.dataset.loadImages()
+
         # Create the BlockBlockService that is used to call the Blob service for the storage account
         azureBlobStorage = BlockBlobService(account_name=self.parameters['azureStorageBucket'], account_key=self.parameters['azureStorageKey'],
                                             endpoint_suffix=self.parameters['azureEndpointSuffix'])
@@ -133,7 +135,7 @@ class Matcher:
                 "confidence": totalCounts[imageId] / total
         } for imageId in totalCounts]
 
-        matches = [match for match in matches if match['confidence'] > 0.20]
+        matches = [match for match in matches if match['confidence'] > 0.10]
         matches = sorted(matches, key=lambda match: match['confidence'], reverse=True)
 
         return matches

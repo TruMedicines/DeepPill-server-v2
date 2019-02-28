@@ -28,7 +28,7 @@ matcher.trainNearestNeighborModel()
 
 test = numpy.ones(shape=(224, 224, 3))
 match = matcher.findMatchForImage(test) # this is used to warm up the server
-print("Ready")
+print("Ready", flush=True)
 
 @app.route("/ImageSearch", methods=['GET', 'POST'])
 def imageMatch():
@@ -53,13 +53,17 @@ def imageMatch():
 
     matches = matcher.findMatchForImage(image)
 
+    for matchIndex, match in enumerate(matches):
+        match['rank'] = matchIndex + 1
+
     data = [{
         "Imageurl": match['url'],
         "Name": f"Pill - {match['id']}",
         "Description": "",
         "Id": match['id'],
         "CreatedOn": "",
-        "Percentage": match['confidence'] * 100
+        "Percentage": match['rank'],
+        "Total": len(matcher.ids)
     } for match in matches]
 
     return json.dumps(data)

@@ -20,7 +20,9 @@ def main():
 
     print("Training model with the following parameters")
     pprint(mergedParameters)
-    model = PillRecognitionModel(mergedParameters, GeneratedDataset(mergedParameters), LoadedDataset(mergedParameters))
+    loaded = LoadedDataset(mergedParameters)
+    loaded.loadImages()
+    model = PillRecognitionModel(mergedParameters, GeneratedDataset(mergedParameters), loaded)
 
     model.loadModel(sys.argv[2])
     # model.measureAccuracy(model.model)
