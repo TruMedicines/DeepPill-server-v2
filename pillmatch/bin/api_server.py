@@ -101,6 +101,10 @@ def send_client_img(path):
 def root():
     return app.send_static_file(f'index.html')
 
+@app.route('/map', methods=['GET'])
+def root2():
+    return app.send_static_file(f'index.html')
+
 @app.route('/index.html', methods=['GET'])
 def root3():
     return app.send_static_file(f'index.html')
