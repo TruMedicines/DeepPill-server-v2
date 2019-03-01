@@ -25,7 +25,8 @@ setup(
         # "tensorflow-gpu",
         "scikit-learn",
         "keras",
-        'azure-storage'
+        'azure-storage',
+        'exifread'
     ],
     classifiers=[
         'Intended Audience :: Education',

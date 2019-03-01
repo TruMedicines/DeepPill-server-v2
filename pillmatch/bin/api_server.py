@@ -1,5 +1,6 @@
 from pillmatch.matcher import Matcher
 from pillmatch.utilities import merge
+from pillmatch.pill_db import PillDB
 from flask import Flask
 from flask import request
 import json
@@ -30,6 +31,8 @@ test = numpy.ones(shape=(224, 224, 3))
 match = matcher.findMatchForImage(test) # this is used to warm up the server
 print("Ready", flush=True)
 
+db = PillDB()
+
 @app.route("/ImageSearch", methods=['GET', 'POST'])
 def imageMatch():
     print("received request")
@@ -38,6 +41,8 @@ def imageMatch():
     fileName = list(dict(request.files).keys())[0]
 
     data = request.files[fileName].read()
+
+    db.addPill(data)
 
     buffer = io.BytesIO()
     buffer.write(data)
@@ -67,6 +72,10 @@ def imageMatch():
     } for match in matches]
 
     return json.dumps(data)
+
+@app.route("/PillCoordinates", methods=['GET'])
+def pillCoordinates():
+    return json.dumps({"pills": db.getPills()[-100:]})
 
 def main():
     app.run(host="192.168.1.17")
