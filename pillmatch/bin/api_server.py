@@ -9,7 +9,9 @@ import os
 import skimage.io
 import tempfile
 import io
+from flask_cors import CORS
 app = Flask(__name__)
+CORS(app)
 
 
 with open('default_parameters.json', 'rt') as file:
@@ -36,7 +38,6 @@ db = PillDB()
 @app.route("/ImageSearch", methods=['GET', 'POST'])
 def imageMatch():
     print("received request")
-    print(request.files)
 
     fileName = list(dict(request.files).keys())[0]
 

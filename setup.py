@@ -26,7 +26,8 @@ setup(
         "scikit-learn",
         "keras",
         'azure-storage',
-        'exifread'
+        'exifread',
+        'flask-cors'
     ],
     classifiers=[
         'Intended Audience :: Education',
