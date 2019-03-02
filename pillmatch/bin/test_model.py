@@ -18,7 +18,7 @@ def main():
     mergedParameters = defaultParameters
     merge(parameters, mergedParameters)
 
-    print("Training model with the following parameters")
+    print("Testing model with the following parameters")
     pprint(mergedParameters)
     loaded = LoadedDataset(mergedParameters)
     loaded.loadImages()

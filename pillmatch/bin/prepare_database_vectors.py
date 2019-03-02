@@ -22,7 +22,7 @@ def main():
     mergedParameters = defaultParameters
     merge(parameters, mergedParameters)
 
-    print("Training model with the following parameters")
+    print("Preparing DB vectors with the following parameters")
     pprint(mergedParameters)
 
     matcher = Matcher(mergedParameters)

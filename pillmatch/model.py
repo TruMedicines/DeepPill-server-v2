@@ -302,10 +302,10 @@ class PillRecognitionModel:
             imageNet.add(Reshape([2048]))
             imageNet.add(BatchNormalization())
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"]))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"], kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4)))
             imageNet.add(BatchNormalization())
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], activity_regularizer=l2(1e-7)))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4)))
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
