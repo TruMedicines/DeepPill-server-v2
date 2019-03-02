@@ -107,12 +107,13 @@ class LoadedDataset(Dataset):
         ])
 
         anchor = LoadedDataset.rawImages[imageId % len(self.rawImages)]
+        anchor = skimage.transform.rotate(anchor, angle=random.uniform(0, 360), mode='constant', cval=1)
 
         augmentations = []
         for n in range(count):
             rotationDirection = random.choice([-1, +1])
-            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["generateAugmentation"]["minRotation"] / 2,
-                                                                                    self.params["generateAugmentation"]["maxRotation"] / 2) * rotationDirection,
+            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["loadAugmentation"]["minRotation"] / 2,
+                                                                                    self.params["loadAugmentation"]["maxRotation"] / 2) * rotationDirection,
                                                        mode='constant', cval=1)
             if applyAugmentations:
                 anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]

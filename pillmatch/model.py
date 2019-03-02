@@ -34,6 +34,7 @@ import math
 import skimage.transform
 import skimage.io
 import random
+import gc
 import concurrent.futures
 import multiprocessing
 from tensorflow.python.client import device_lib
@@ -84,7 +85,7 @@ class PillRecognitionModel:
         self.session = tf.Session(config=config)
         set_session(self.session)
 
-        self.maxImagesToGenerate = 100
+        self.maxImagesToGenerate = 1000
         self.imageGenerationManager = multiprocessing.Manager()
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
         self.augmentedRealImages = []
@@ -123,8 +124,10 @@ class PillRecognitionModel:
                     self.imageId += 1
 
                 if imageId % 100 == 0:
-                    self.imageGenerationExecutor.shutdown(wait=False)
+                    gc.collect()
+                    currentImageExecutor = self.imageGenerationExecutor
                     self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
+                    currentImageExecutor.shutdown(wait=False)
 
                 if imageId % 2 == 0:
                     self.generatedDataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
@@ -302,10 +305,10 @@ class PillRecognitionModel:
             imageNet.add(Reshape([2048]))
             imageNet.add(BatchNormalization())
             imageNet.add(Dropout(self.parameters["neuralNetwork"]["dropoutRate"]))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"]), activation=self.parameters["neuralNetwork"]["denseActivation"], kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4)))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']*self.parameters["neuralNetwork"]["denseLayerMultiplier"])))
             imageNet.add(BatchNormalization())
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize'])))
-            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"], kernel_regularizer=l2(1e-4), bias_regularizer=l2(1e-4)))
+            imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
             # imageNet.add(Dense(int(self.parameters['neuralNetwork']['vectorSize']), activation=self.parameters["neuralNetwork"]["finalActivation"]))
 
             imageNet.summary()
@@ -459,18 +462,21 @@ class PillRecognitionModel:
         self.model.count_params()
         self.running = True
 
-        self.model.fit_generator(
-            generator=trainingGenerator,
-            steps_per_epoch=self.parameters['stepsPerEpoch'],
-            epochs=self.epochs,
-            validation_data=testingGenerator,
-            validation_steps=self.parameters['validationSteps'],
-            workers=1,
-            use_multiprocessing=False,
-            max_queue_size=self.parameters['maxQueueSize'],
-            callbacks=callbacks,
-            initial_epoch=self.startEpoch
-        )
+        currentEpoch = self.startEpoch
+        while currentEpoch < self.epochs:
+            self.model.fit_generator(
+                generator=trainingGenerator,
+                steps_per_epoch=self.parameters['stepsPerEpoch'],
+                epochs=self.epochs,
+                validation_data=testingGenerator,
+                validation_steps=self.parameters['validationSteps'],
+                workers=1,
+                use_multiprocessing=False,
+                max_queue_size=self.parameters['maxQueueSize'],
+                callbacks=callbacks,
+                initial_epoch=currentEpoch
+            )
+            currentEpoch += 1
 
         imageNet.save(f"model-final.h5")
         imageNet.save_weights(f"model-final-weights.h5")
