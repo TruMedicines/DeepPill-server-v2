@@ -58,11 +58,19 @@ class GeneratedDataset(Dataset):
                 anchorAugmented = anchorAugmented / 255.0
                 anchorAugmented = numpy.maximum(0, anchorAugmented)
 
-                anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
+                anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.98, copy=False)
                 anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
 
                 randomTexture = random.choice(textures.textures)
                 anchorAugmented = anchorWhiteMask * randomTexture + (1.0 - anchorWhiteMask) * anchorAugmented
+
+                # Apply custom hue transform
+                # hueShift = skimage.color.rgb2hsv(anchor) * 255.0
+                # hueShift[:, :, 0] = hueShift[:, :, 0] + random.randint(0, 255)
+                # hueShift[:, :, 0] = numpy.mod(hueShift[:, :, 0], 255)
+                # hueShift[:, :, 1] = hueShift[:, :, 1] + random.randint(-50, 50)
+                # hueShift[:, :, 1] = numpy.minimum(hueShift[:, :, 1], 255)
+                # anchor = skimage.color.hsv2rgb(hueShift / 255.0)
 
                 anchorAugmented = secondAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
                 anchorAugmented = anchorAugmented / 255.0

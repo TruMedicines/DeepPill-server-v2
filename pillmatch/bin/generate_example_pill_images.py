@@ -1,4 +1,5 @@
 from pillmatch import generated_dataset
+from pillmatch import loaded_dataset
 from pillmatch.model import PillRecognitionModel
 import json
 import sys
@@ -19,5 +20,7 @@ def main():
 
 
     dataset = generated_dataset.GeneratedDataset(mergedParameters)
+    # dataset = loaded_dataset.LoadedDataset(mergedParameters)
+    # dataset.loadImages()
 
     dataset.generateExamples()

@@ -8,6 +8,8 @@ import numpy
 import sklearn
 import os
 import sklearn.preprocessing
+import skimage.color
+import skimage.io
 from pillmatch import textures
 import cv2
 
@@ -42,10 +44,21 @@ class Dataset:
             # iaa.CoarseDropout(p=self.params['trainingAugmentation']['coarseDropoutProbability'], size_percent=self.params['trainingAugmentation']['coarseDropoutSize'])
         ])
 
+
         augmentations = []
         images = self._getRawPillImages(self.params['neuralNetwork']['augmentationsPerImage'], imageId)
         for n, image in enumerate(images):
             anchor = self._applyPreprocessing(image)
+
+            # Apply custom hue transform
+            hueShift = skimage.color.rgb2hsv(anchor) * 255.0
+            hueShift[:, :, 0] = hueShift[:, :, 0] + random.randint(-50, 50)
+            hueShift[:, :, 0] = numpy.mod(hueShift[:, :, 0], 255)
+            hueShift[:, :, 1] = hueShift[:, :, 1] + random.randint(-50, 50)
+            hueShift[:, :, 1] = numpy.minimum(hueShift[:, :, 1], 255)
+            anchor = skimage.color.hsv2rgb(hueShift / 255.0)
+
+            anchor = self.addShadow(anchor)
 
             rotationDirection = random.choice([-1, +1])
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.currentMinRotation / 2, self.currentMaxRotation / 2) * rotationDirection, mode='constant', cval=0)
@@ -174,35 +187,72 @@ class Dataset:
         pass
 
     def generateExamples(self, save=True, show=False):
-        for n in range(5):
+        for n in range(6):
             images = self._getRawPillImages(5, n)
 
             for imageIndex, image in enumerate(images):
-                plt.imshow(image, interpolation='lanczos')
                 if save:
-                    plt.savefig('raw-' + str(n) + "-" + str(imageIndex) + ".png")
+                    skimage.io.imsave('raw-' + str(n) + "-" + str(imageIndex) + ".png", image)
                 if show:
+                    plt.imshow(image, interpolation='lanczos')
                     plt.show()
 
-        for n in range(3):
+        for n in range(6):
             images = self.getTrainingImageSet(n)
 
             for imageIndex, image in enumerate(images):
-                plt.imshow(image, interpolation='lanczos')
                 if save:
-                    plt.savefig('training-' + str(n) + "-" + str(imageIndex) + ".png")
+                    skimage.io.imsave('training-' + str(n) + "-" + str(imageIndex) + ".png", image)
                 if show:
+                    plt.imshow(image, interpolation='lanczos')
                     plt.show()
 
-        for n in range(3):
+        for n in range(6):
             base, rotations = self.getRotationTestingImageSet(n)
 
-            plt.imshow(base, interpolation='lanczos')
-            plt.savefig('testing-' + str(n) + "-base.png")
+            skimage.io.imsave('testing-' + str(n) + "-base.png", base)
 
             for imageIndex, image in enumerate(rotations.values()):
-                plt.imshow(image, interpolation='lanczos')
                 if save:
-                    plt.savefig('testing-' + str(n) + "-" + str(imageIndex) + ".png")
+                    skimage.io.imsave('testing-' + str(n) + "-" + str(imageIndex) + ".png", image)
                 if show:
+                    plt.imshow(image, interpolation='lanczos')
                     plt.show()
+
+    def generateShadowCoordinates(self, imshape, no_of_shadows=1):
+        vertices_list = []
+        for index in range(no_of_shadows):
+            vertex = []
+            for dimensions in range(numpy.random.randint(3, 4)):  ## Dimensionality of the shadow polygon
+                vertex.append((imshape[1] * numpy.random.uniform(), imshape[0] // 3 + imshape[0] * numpy.random.uniform()))
+            vertices = numpy.array([vertex], dtype=numpy.int32)  ## single shadow vertices 
+            vertices_list.append(vertices)
+        return vertices_list  ## List of shadow vertices
+    
+    
+    def addShadow(self, image):
+        imshape = image.shape
+        # Primary shadow / lightness effects.
+        vertices_list = self.generateShadowCoordinates(imshape, 3)
+        for vertices in vertices_list:
+            mask = numpy.zeros_like(image)
+            cv2.fillPoly(mask, vertices, 255)
+            if random.uniform(0, 1) < 0.5:
+                adjust = random.uniform(0, 0.75)
+                image[:, :, :][mask[:, :, 0] == 255] = image[:, :, :][mask[:, :, 0] == 255] * (1.0 - adjust) + numpy.ones_like(image[:, :, :][mask[:, :, 0] == 255]) * adjust
+            else:
+                adjust = random.uniform(0, 0.25)
+                image[:, :, :][mask[:, :, 0] == 255] = image[:, :, :][mask[:, :, 0] == 255] * (1.0 - adjust) + numpy.zeros_like(image[:, :, :][mask[:, :, 0] == 255]) * adjust
+
+        # A hue shift, simulates observed color shift in some images
+        image_hsv = skimage.color.rgb2hsv(image)
+        vertices_list = self.generateShadowCoordinates(imshape, 1)
+        for vertices in vertices_list:
+            mask = numpy.zeros_like(image)
+            cv2.fillPoly(mask, vertices, 255)
+            adjust = random.uniform(-0.3, 0.3)
+            image_hsv[:, :, 0][mask[:, :, 0] == 255] = numpy.mod(image[:, :, 0][mask[:, :, 0] == 255] + adjust, 1)
+
+        image = skimage.color.hsv2rgb(image_hsv)
+
+        return image

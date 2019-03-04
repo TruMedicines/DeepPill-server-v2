@@ -36,7 +36,7 @@
                    "vectorSize": 1024,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
-                   "epochs": 100,
+                   "epochs": 20,
                    "lossMode": "all",
                    "lossMargin": 0.3
    },
@@ -45,25 +45,7 @@
     "weights": "imagenet"
   },
   "generateAugmentation": {
-    "minScale": 0.7,
-    "maxScale": 0.9,
-    "minTranslate": -0.1,
-    "maxTranslate": 0.1,
-    "minGaussianBlur": 0,
-    "maxGaussianBlur": 1,
-    "minMotionBlur": 3,
-    "maxMotionBlur": 8,
-    "minRotation": 0,
-    "maxRotation": 1,
-    "minShear": -12,
-    "maxShear": 12,
-    "minContrast": 0.9,
-    "maxContrast": 1.2,
-    "minBrightness": -8,
-    "maxBrightness": 5
-  },
-  "loadAugmentation": {
-    "minScale": 0.8,
+    "minScale": 0.5,
     "maxScale": 1.0,
     "minTranslate": -0.1,
     "maxTranslate": 0.1,
@@ -73,12 +55,30 @@
     "maxMotionBlur": 8,
     "minRotation": 0,
     "maxRotation": 1,
-    "minShear": -12,
-    "maxShear": 12,
-    "minContrast": 0.9,
-    "maxContrast": 1.1,
-    "minBrightness": -5,
-    "maxBrightness": 1
+    "minShear": -6,
+    "maxShear": 6,
+    "minContrast": 0.95,
+    "maxContrast": 1.05,
+    "minBrightness": -40,
+    "maxBrightness": 40
+  },
+  "loadAugmentation": {
+    "minScale": 0.5,
+    "maxScale": 1.0,
+    "minTranslate": -0.1,
+    "maxTranslate": 0.1,
+    "minGaussianBlur": 0,
+    "maxGaussianBlur": 1,
+    "minMotionBlur": 3,
+    "maxMotionBlur": 8,
+    "minRotation": 0,
+    "maxRotation": 1,
+    "minShear": -6,
+    "maxShear": 6,
+    "minContrast": 0.95,
+    "maxContrast": 1.05,
+    "minBrightness": -40,
+    "maxBrightness": 40
   },
   "preprocessing": {
     "detectCircle": "true",
@@ -95,7 +95,7 @@
       "$index": 0,
       "easing": "epoch",
       "minRotationEasing": 0.01,
-      "maxRotationEasing": 0.20
+      "maxRotationEasing": 1.00
     }
   },
   "finalTestPrintEvery": 100,

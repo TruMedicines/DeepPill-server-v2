@@ -120,7 +120,7 @@ class LoadedDataset(Dataset):
                 anchorAugmented = anchorAugmented / 255.0
                 anchorAugmented = numpy.maximum(0, anchorAugmented)
 
-                anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.99, copy=False)
+                anchorWhiteMask = sklearn.preprocessing.binarize(numpy.mean(anchorAugmented, axis=2), threshold=0.96, copy=False)
                 anchorWhiteMask = numpy.repeat(anchorWhiteMask[:, :, numpy.newaxis], 3, axis=2)
 
                 randomTexture = random.choice(textures.textures)

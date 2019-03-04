@@ -1,6 +1,6 @@
 {
   "trainingAugmentation": {
-    "gaussianNoise": 0.10
+    "gaussianNoise": 0.20
   },
   "neuralNetwork": {
     "optimizer": {
@@ -13,7 +13,7 @@
   },
   "preprocessing": {
     "detectCircle": "false",
-    "edgeDetection": {"enabled": "false", "threshold": 200}
+    "edgeDetection": {"enabled": "false", "threshold": 50}
   },
   "startingWeights": {
     "pretrainPercent": 0,
