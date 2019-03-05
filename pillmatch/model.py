@@ -40,6 +40,8 @@ import multiprocessing
 from tensorflow.python.client import device_lib
 from keras.backend.tensorflow_backend import set_session
 import datetime
+import tracemalloc
+
 
 class PillRecognitionModel:
     def __init__(self, parameters, generatedDataset, realDataset):
@@ -80,16 +82,17 @@ class PillRecognitionModel:
         self.measurementImages = []
         self.measurementRotatedImages = {}
 
+        self.trackMemory = False
+
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         self.session = tf.Session(config=config)
         set_session(self.session)
 
-        self.maxImagesToGenerate = 1000
-        self.imageGenerationManager = multiprocessing.Manager()
+        self.maxImagesToGenerate = 500
         self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=parameters['imageGenerationWorkers'])
-        self.augmentedRealImages = []
-        self.augmentedGeneratedImages = []
+        self.augmentedRealImages = list()
+        self.augmentedGeneratedImages = list()
         self.imageGenerationThreads = []
         self.imageListLock = threading.Lock()
         self.augmentedTripletListLock = threading.Lock()
@@ -100,21 +103,27 @@ class PillRecognitionModel:
         self.imageId = 0
         self.imageIdLock = threading.Lock()
 
+        if self.trackMemory:
+            from pympler import tracker
+            self.memory_tracker = tracker.SummaryTracker()
+            self.memory_tracker.print_diff()
+
         self.startEpoch = parameters.get('startEpoch', 0)
 
         if parameters['trainingAugmentation']['rotationEasing']['easing'] == 'epoch':
-            self.currentMinRotation = self.imageGenerationManager.Value('i', 0)
-            self.currentMaxRotation = self.imageGenerationManager.Value('i', 1)
+            self.currentMinRotation = 0
+            self.currentMaxRotation = 1
             self.updateRotationValues(self.startEpoch)
         else:
-            self.currentMinRotation = self.imageGenerationManager.Value('i', parameters['trainingAugmentation']['minRotation'])
-            self.currentMaxRotation = self.imageGenerationManager.Value('i', parameters['trainingAugmentation']['maxRotation'])
+            self.currentMinRotation = parameters['trainingAugmentation']['minRotation']
+            self.currentMaxRotation = parameters['trainingAugmentation']['maxRotation']
 
         time.sleep(2)
 
         for n in range(parameters['imageGenerationWorkers']):
             newThread = threading.Thread(target=self.imageGenerationThread, daemon=True)
             self.imageGenerationThreads.append(newThread)
+
 
     def imageGenerationThread(self):
         while threading.main_thread().isAlive() and not self.finished:
@@ -130,7 +139,7 @@ class PillRecognitionModel:
                     currentImageExecutor.shutdown(wait=False)
 
                 if imageId % 2 == 0:
-                    self.generatedDataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                    self.generatedDataset.setRotationParams(self.currentMinRotation, self.currentMaxRotation)
                     future = self.imageGenerationExecutor.submit(self.generatedDataset.getTrainingImageSet, imageId)
                     triplet = future.result()
 
@@ -139,7 +148,7 @@ class PillRecognitionModel:
                         if len(self.augmentedGeneratedImages) >= self.maxImagesToGenerate:
                             del self.augmentedGeneratedImages[0]
                 else:
-                    self.realDataset.setRotationParams(self.currentMinRotation.value, self.currentMaxRotation.value)
+                    self.realDataset.setRotationParams(self.currentMinRotation, self.currentMaxRotation)
                     future = self.imageGenerationExecutor.submit(self.realDataset.getTrainingImageSet, imageId)
                     triplet = future.result()
 
@@ -150,8 +159,10 @@ class PillRecognitionModel:
                 if not self.running or self.measuringAccuracy:
                     time.sleep(1.0)
             except OSError as e:
+                print(e)
                 time.sleep(2.0)
             except RuntimeError as e:
+                print(e)
                 time.sleep(2.0)
 
     def getAvailableGpus(self):
@@ -270,9 +281,8 @@ class PillRecognitionModel:
                     inputs.append(tripletInputs[input])
                     outputs.append(numpy.ones(self.parameters['neuralNetwork']['vectorSize']))
 
-            # Add in blends to the batch
-            inputs = numpy.array(inputs)
-            outputs = numpy.array(outputs)
+            inputs = numpy.array(inputs, copy=True)
+            outputs = numpy.array(outputs, copy=True)
 
             yield inputs, outputs
 
@@ -321,9 +331,9 @@ class PillRecognitionModel:
         return model, imageNet
 
     def updateRotationValues(self, epoch):
-        self.currentMinRotation.value = min(1.0, float(epoch+1) / float(
+        self.currentMinRotation = min(1.0, float(epoch+1) / float(
             (self.parameters['trainingAugmentation']['rotationEasing']['minRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['trainingAugmentation']['minRotation']
-        self.currentMaxRotation.value = min(1.0, float(epoch+1) / float(
+        self.currentMaxRotation = min(1.0, float(epoch+1) / float(
             (self.parameters['trainingAugmentation']['rotationEasing']['maxRotationEasing'] * self.parameters['neuralNetwork']['epochs']))) * self.parameters['trainingAugmentation']['maxRotation']
 
     def learningRateForEpoch(self, epoch):
@@ -366,7 +376,7 @@ class PillRecognitionModel:
         rollingAverage99 = None
         rollingAverage995 = None
         def batchCallback(batch, log):
-            nonlocal rollingAverage9, rollingAverage95, rollingAverage99, rollingAverage995
+            nonlocal rollingAverage9, rollingAverage95, rollingAverage99, rollingAverage995, currentSnapshot
             # if batch % 100 == 0:
             #     self.memory_tracker.print_diff()
             if rollingAverage9 is None:
@@ -384,6 +394,24 @@ class PillRecognitionModel:
             trend99 = '+' if rollingAverage95 > rollingAverage99 else '-'
             trend995 = '+' if rollingAverage99 > rollingAverage995 else '-'
             trend = trend95 + trend99 + trend995
+
+            if self.trackMemory:
+                if batch % 50 == 0 and len(self.augmentedRealImages) >= self.maxImagesToGenerate:
+                    gc.collect()
+
+                    self.memory_tracker.print_diff()
+                    snapshot = tracemalloc.take_snapshot()
+                    if currentSnapshot is not None:
+                        top_stats = snapshot.compare_to(currentSnapshot, 'traceback')
+
+                        for stat in sorted(top_stats, key=lambda stat: stat.size_diff, reverse=True)[:10]:
+                            print("count", stat.count_diff, "size", stat.size_diff)
+                            print('\n'.join(stat.traceback.format()))
+
+                        for stat in sorted(top_stats, key=lambda stat: stat.size_diff, reverse=False)[:10]:
+                            print("count", stat.count_diff, "size", stat.size_diff)
+                            print('\n'.join(stat.traceback.format()))
+                    currentSnapshot = snapshot
 
             print("  batch loss", log['loss'], "  rl9  ", rollingAverage9,  "  rl99", rollingAverage99, "  trend ", trend)
 
@@ -461,6 +489,10 @@ class PillRecognitionModel:
         self.model.summary()
         self.model.count_params()
         self.running = True
+
+        if self.trackMemory:
+            tracemalloc.start(5)
+            currentSnapshot = None
 
         currentEpoch = self.startEpoch
         while currentEpoch < self.epochs:

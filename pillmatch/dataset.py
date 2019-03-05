@@ -72,7 +72,7 @@ class Dataset:
 
             augmentations.append(anchorAugmented)
 
-        result = numpy.array(augmentations)
+        result = numpy.array(augmentations, copy=True)
 
         return result
 
