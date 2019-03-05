@@ -36,7 +36,7 @@ class LoadedDataset(Dataset):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             futures = []
-            for file in sorted(os.listdir('test-images'))[:10]:
+            for file in sorted(os.listdir('test-images')):
                 if file.endswith("-cropped.png"):
                     continue
 
