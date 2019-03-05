@@ -1,7 +1,7 @@
 {
   "stepsPerEpoch": 1000,
-  "validationSteps": 5,
-  "maxQueueSize": 25,
+  "validationSteps": 25,
+  "maxQueueSize": 10,
   "epochsBeforeAccuracyMeasurement": 1,
   "testingPrintEvery": 250,
   "datasetSizesToTest": [

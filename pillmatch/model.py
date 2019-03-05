@@ -132,7 +132,7 @@ class PillRecognitionModel:
                     imageId = self.imageId
                     self.imageId += 1
 
-                if imageId % 100 == 0:
+                if imageId % 500 == 499:
                     gc.collect()
                     currentImageExecutor = self.imageGenerationExecutor
                     self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
@@ -266,7 +266,7 @@ class PillRecognitionModel:
             inputs = []
             outputs = []
 
-            if batchNumber % 2 == 0 and batchNumber > 500:
+            if batchNumber % 2 == 0:
                 triplets = random.sample(range(min(len(self.augmentedRealImages)-1, self.maxImagesToGenerate-1)), min(len(self.augmentedRealImages)-1, int(self.parameters['neuralNetwork']['batchSize'])))
                 augmentedImages = self.augmentedRealImages
             else:
@@ -345,9 +345,6 @@ class PillRecognitionModel:
 
         self.model, imageNet = self.createCoreModel()
 
-        testingGenerator = self.generateBatch(testing=True)
-        trainingGenerator = self.generateBatch(testing=False)
-
         bestAccuracy = None
         allAccuracies = []
 
@@ -394,6 +391,9 @@ class PillRecognitionModel:
             trend99 = '+' if rollingAverage95 > rollingAverage99 else '-'
             trend995 = '+' if rollingAverage99 > rollingAverage995 else '-'
             trend = trend95 + trend99 + trend995
+
+            if batch % 50 == 0:
+                gc.collect()
 
             if self.trackMemory:
                 if batch % 50 == 0 and len(self.augmentedRealImages) >= self.maxImagesToGenerate:
@@ -459,6 +459,8 @@ class PillRecognitionModel:
             self.model.count_params()
             self.running = True
 
+            testingGenerator = self.generateBatch(testing=True)
+            trainingGenerator = self.generateBatch(testing=False)
             self.model.fit_generator(
                 generator=trainingGenerator,
                 steps_per_epoch=self.parameters['stepsPerEpoch'],
@@ -496,10 +498,12 @@ class PillRecognitionModel:
 
         currentEpoch = self.startEpoch
         while currentEpoch < self.epochs:
+            testingGenerator = self.generateBatch(testing=True)
+            trainingGenerator = self.generateBatch(testing=False)
             self.model.fit_generator(
                 generator=trainingGenerator,
                 steps_per_epoch=self.parameters['stepsPerEpoch'],
-                epochs=self.epochs,
+                epochs=currentEpoch + 1,
                 validation_data=testingGenerator,
                 validation_steps=self.parameters['validationSteps'],
                 workers=1,
