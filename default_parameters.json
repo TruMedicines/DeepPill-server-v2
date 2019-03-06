@@ -82,7 +82,8 @@
   },
   "preprocessing": {
     "detectCircle": "true",
-    "edgeDetection": {"enabled": "false", "threshold": 200}
+    "edgeDetection": {"enabled": "false", "threshold": 200},
+    "threshold": {"enabled": "false"}
   },
   "trainingAugmentation": {
     "gaussianNoise": 0.15,
@@ -98,22 +99,12 @@
       "maxRotationEasing": 1.00
     }
   },
-  "finalTestPrintEvery": 100,
-  "finalTestImages": 10,
+  "finalTestPrintEvery": 25,
+  "finalTestImages": 100,
   "finalTestRotationIncrement": 30,
-  "finalTestDBAugmentations": 1,
+  "finalTestDBAugmentations": 5,
   "finalTestAugmentationsPerImage": 8,
   "finalTestQueryRotationIncrement": 15,
-  "finalTestAugmentation": {
-    "minScale": 0.9,
-    "maxScale": 1.1,
-    "minTranslate": -0.1,
-    "maxTranslate": 0.1,
-    "minGaussianBlur": 0,
-    "maxGaussianBlur": 1,
-    "minMotionBlur": 5,
-    "maxMotionBlur": 11
-  },
   "azureStorageBucket": "pillimages",
   "azureStorageKey": "j8/WRyKg4STU5h3RddQcq2QSjE1DiJDu18azIFt91ztOy50XKmLNo6th3Ee/3TsVAMQfe17nx+nSvDoH5Qr7Iw==",
   "azureStorageUrl": "https://pillimages.blob.core.usgovcloudapi.net/images/",

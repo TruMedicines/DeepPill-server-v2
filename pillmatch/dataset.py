@@ -12,6 +12,7 @@ import skimage.color
 import skimage.io
 from pillmatch import textures
 import cv2
+from skimage.filters import threshold_otsu, threshold_local
 
 
 class Dataset:
@@ -48,25 +49,28 @@ class Dataset:
         augmentations = []
         images = self._getRawPillImages(self.params['neuralNetwork']['augmentationsPerImage'], imageId)
         for n, image in enumerate(images):
-            anchor = self._applyPreprocessing(image)
+            anchor = image
 
-            # Apply custom hue transform
-            hueShift = skimage.color.rgb2hsv(anchor) * 255.0
-            hueShift[:, :, 0] = hueShift[:, :, 0] + random.randint(-50, 50)
-            hueShift[:, :, 0] = numpy.mod(hueShift[:, :, 0], 255)
-            hueShift[:, :, 1] = hueShift[:, :, 1] + random.randint(-50, 50)
-            hueShift[:, :, 1] = numpy.minimum(hueShift[:, :, 1], 255)
-            anchor = skimage.color.hsv2rgb(hueShift / 255.0)
+            if self.params['preprocessing']['threshold']['enabled'] == 'false':
+                # Apply custom hue transform
+                hueShift = skimage.color.rgb2hsv(anchor) * 255.0
+                hueShift[:, :, 0] = hueShift[:, :, 0] + random.randint(-50, 50)
+                hueShift[:, :, 0] = numpy.mod(hueShift[:, :, 0], 255)
+                hueShift[:, :, 1] = hueShift[:, :, 1] + random.randint(-50, 50)
+                hueShift[:, :, 1] = numpy.minimum(hueShift[:, :, 1], 255)
+                anchor = skimage.color.hsv2rgb(hueShift / 255.0)
 
-            anchor = self.addShadow(anchor)
+                anchor = self.addShadow(anchor)
+
+            anchor = self._applyPreprocessing(anchor)
 
             rotationDirection = random.choice([-1, +1])
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.currentMinRotation / 2, self.currentMaxRotation / 2) * rotationDirection, mode='constant', cval=0)
+            if self.params['preprocessing']['threshold']['enabled'] == 'false':
+                anchorAugmented = numpy.maximum(numpy.zeros_like(anchorAugmented), anchorAugmented)
+                anchorAugmented = numpy.minimum(numpy.ones_like(anchorAugmented), anchorAugmented)
 
-            anchorAugmented = numpy.maximum(numpy.zeros_like(anchorAugmented), anchorAugmented)
-            anchorAugmented = numpy.minimum(numpy.ones_like(anchorAugmented), anchorAugmented)
-
-            anchorAugmented = noiseAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0] / 255.0
+                anchorAugmented = noiseAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0] / 255.0
 
             anchorAugmented = skimage.transform.resize(anchorAugmented, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
 
@@ -124,10 +128,10 @@ class Dataset:
         self.setRotationParams(0, 360)
         self.params["generateAugmentation"]["minRotation"] = 0
         self.params["generateAugmentation"]["maxRotation"] = 360
-        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId, applyAugmentations=False)
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"], imageId, applyAugmentations=True)
 
         dbImages = []
-        for dbImage in rawImages[:self.params["finalTestDBAugmentations"]]:
+        for dbImage in rawImages:
             dbImage = skimage.transform.resize(dbImage, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
             for rotation in range(0, 360, self.params['finalTestRotationIncrement']):
                 dbImages.append(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1))
@@ -173,6 +177,15 @@ class Dataset:
             edges = cv2.Canny(grey, int(self.params['preprocessing']['edgeDetection']['threshold']/2), self.params['preprocessing']['edgeDetection']['threshold'], 5)
             image = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
             image = numpy.array(image, dtype=numpy.float32) / 255.0
+
+        if self.params['preprocessing']['threshold']['enabled'] == 'true':
+            grey = skimage.color.rgb2gray(image)
+            thresh = threshold_local(grey, block_size=31, offset=0.05)
+            binary = grey <= thresh
+
+            image[:, :, 0] = binary
+            image[:, :, 1] = binary
+            image[:, :, 2] = binary
 
         return image
 

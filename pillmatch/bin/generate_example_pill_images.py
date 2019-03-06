@@ -19,8 +19,8 @@ def main():
     merge(parameters, mergedParameters)
 
 
-    dataset = generated_dataset.GeneratedDataset(mergedParameters)
-    # dataset = loaded_dataset.LoadedDataset(mergedParameters)
-    # dataset.loadImages()
+    # dataset = generated_dataset.GeneratedDataset(mergedParameters)
+    dataset = loaded_dataset.LoadedDataset(mergedParameters)
+    dataset.loadImages()
 
     dataset.generateExamples()

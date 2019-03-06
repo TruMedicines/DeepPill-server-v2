@@ -6,7 +6,7 @@
     "optimizer": {
       "optimizerName": "nadam",
       "learningRate": 0.00011,
-      "learningRateDecay": 0.95
+      "learningRateDecay": 0.97
     },
    "lossMode": "hard",
    "lossMargin": 0.40

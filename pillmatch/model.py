@@ -445,9 +445,9 @@ class PillRecognitionModel:
             imageNet.layers[0].trainable = False
 
             if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
-                optimizer = Adam(self.learningRateForEpoch(self.startEpoch))
+                optimizer = Adam(self.learningRateForEpoch(self.startEpoch), beta_1=0.99, beta_2=0.999)
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'nadam':
-                optimizer = Nadam(self.learningRateForEpoch(self.startEpoch))
+                optimizer = Nadam(self.learningRateForEpoch(self.startEpoch), beta_1=0.99, beta_2=0.999)
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'rmsprop':
                 optimizer = RMSprop(self.learningRateForEpoch(self.startEpoch))
             elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
@@ -477,9 +477,9 @@ class PillRecognitionModel:
             imageNet.layers[0].trainable = True
 
         if self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'adam':
-            optimizer = Adam(self.learningRateForEpoch(self.startEpoch))
+            optimizer = Adam(self.learningRateForEpoch(self.startEpoch), beta_1=0.99, beta_2=0.999)
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'nadam':
-            optimizer = Nadam(self.learningRateForEpoch(self.startEpoch))
+            optimizer = Nadam(self.learningRateForEpoch(self.startEpoch), beta_1=0.99, beta_2=0.999)
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'rmsprop':
             optimizer = RMSprop(self.learningRateForEpoch(self.startEpoch))
         elif self.parameters['neuralNetwork']['optimizer']['optimizerName'] == 'sgd':
@@ -677,7 +677,7 @@ class PillRecognitionModel:
                 imageId = currentImageId
                 currentImageId += 1
 
-                result = self.generatedDataset.getFinalTestingImageSet(imageId)
+                result = self.realDataset.getFinalTestingImageSet(imageId)
                 
                 imageId = result[0]
                 dbImages = result[1]
@@ -685,13 +685,13 @@ class PillRecognitionModel:
 
                 if not os.path.exists(f"data/images/{imageId}"):
                     os.mkdir(f"data/images/{imageId}")
-
-                for imageIndex, image in enumerate(dbImages):
-                    skimage.io.imsave(f"data/images/{imageId}/db-{imageIndex}.png", image)
-
-                for augmentationIndex, augmentation in enumerate(testImages):
-                    for imageIndex, image in enumerate(augmentation):
-                        skimage.io.imsave(f"data/images/{imageId}/test-{augmentationIndex}-{imageIndex}.png", image)
+                #
+                # for imageIndex, image in enumerate(dbImages):
+                #     skimage.io.imsave(f"data/images/{imageId}/db-{imageIndex}.png", image)
+                #
+                # for augmentationIndex, augmentation in enumerate(testImages):
+                #     for imageIndex, image in enumerate(augmentation):
+                #         skimage.io.imsave(f"data/images/{imageId}/test-{augmentationIndex}-{imageIndex}.png", image)
 
                 dbVectors[imageId] = sklearn.preprocessing.normalize(model.predict(numpy.array(dbImages)))
 
