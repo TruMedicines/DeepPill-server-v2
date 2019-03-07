@@ -28,7 +28,7 @@ class GeneratedDataset(Dataset):
 
         self.params = params
 
-    def _getRawPillImages(self, count, imageId, applyAugmentations=True):
+    def _getRawPillImages(self, count, imageId, applyAugmentationsAfter=0):
         mainAugmentation = iaa.Sequential([
             iaa.Affine(
                 scale=(self.params["generateAugmentation"]["minScale"], self.params["generateAugmentation"]["maxScale"]),
@@ -51,7 +51,7 @@ class GeneratedDataset(Dataset):
             rotationDirection = random.choice([-1, +1])
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["generateAugmentation"]["minRotation"] / 2, self.params["generateAugmentation"]["maxRotation"] / 2) * rotationDirection,
                                                        mode='constant', cval=1)
-            if applyAugmentations:
+            if n >= applyAugmentationsAfter:
                 anchorAugmented = numpy.maximum(0, anchorAugmented)
 
                 anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]

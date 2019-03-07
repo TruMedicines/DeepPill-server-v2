@@ -20,6 +20,9 @@ class Matcher:
     def __init__(self, parameters):
         self.parameters = parameters
 
+        parameters['loadAugmentation']['minRotation'] = 0
+        parameters['loadAugmentation']['maxRotation'] = 360
+
         self.dataset = LoadedDataset(self.parameters)
         self.model = PillRecognitionModel(self.parameters, GeneratedDataset(self.parameters), self.dataset)
 
@@ -51,6 +54,9 @@ class Matcher:
 
                 images = self.dataset.getImageDBSet(imageId)
 
+                # for index, image in enumerate(images):
+                #     skimage.io.imsave(f"image{imageId}-{index}.png", image)
+
                 vectors = self.model.model.predict(numpy.array(images))
                 vectors = sklearn.preprocessing.normalize(vectors)
 
@@ -64,6 +70,9 @@ class Matcher:
                         data[f'v{index}'] = value
 
                     writer.writerow(data)
+
+                if imageId % 100 == 0:
+                    print(f"Completed {imageId}/{len(LoadedDataset.rawImages)}")
 
 
     def loadVectorsFile(self):
@@ -90,7 +99,7 @@ class Matcher:
     def trainNearestNeighborModel(self):
         ids, vectors, urls = self.loadVectorsFile()
 
-        self.nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=3)
+        self.nearestNeighborModel = sklearn.neighbors.NearestNeighbors(n_neighbors=1)
         self.nearestNeighborModel.fit(vectors)
 
         self.ids = ids
@@ -112,6 +121,8 @@ class Matcher:
         testRotations = []
         for rotation in range(0, 360, self.parameters['finalTestQueryRotationIncrement']):
             rotated = skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1)
+            rotated = self.dataset._applyPreprocessing(rotated)
+            skimage.io.imsave(f"image-{rotation}.png", rotated)
             testRotations.append(rotated)
 
         testRotations = numpy.array(testRotations)
@@ -119,23 +130,23 @@ class Matcher:
         vectors = self.model.model.predict(testRotations)
         vectors = sklearn.preprocessing.normalize(vectors)
 
-        rotationDistances, rotationMatchingIndexes = self.nearestNeighborModel.kneighbors(vectors, n_neighbors=3)
+        rotationDistances, rotationMatchingIndexes = self.nearestNeighborModel.kneighbors(vectors, n_neighbors=1)
 
-        totalCounts = {}
+        minDistances = {}
         total = 0
         for distances, indexes in zip(rotationDistances, rotationMatchingIndexes):
             for distance, index in zip(distances, indexes):
                 predictId = self.ids[index]
-                totalCounts[predictId] = totalCounts.get(predictId, 0) + 1
+                minDistances[predictId] = min(minDistances.get(predictId, 10000), distance)
                 total +=1
 
         matches = [{
                 "id": imageId,
                 "url": self.urls[imageId],
-                "confidence": totalCounts[imageId] / total
-        } for imageId in totalCounts]
+                "confidence": 1.0 - minDistances[imageId]
+        } for imageId in minDistances]
 
-        matches = [match for match in matches if match['confidence'] > 0.10]
+        matches = [match for match in matches if match['confidence'] > 0.60]
         matches = sorted(matches, key=lambda match: match['confidence'], reverse=True)
 
         return matches

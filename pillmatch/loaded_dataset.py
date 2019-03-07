@@ -36,19 +36,25 @@ class LoadedDataset(Dataset):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             futures = []
-            for file in sorted(os.listdir('test-images'))[:10]:
-                if file.endswith("-cropped.png"):
-                    continue
-
+            files = [file for file in os.listdir('test-images') if not file.endswith("-cropped.png")]
+            # random.shuffle(files)
+            # files = sorted(files)
+            for file in files:
                 fileName = f"test-images/{file}"
+                croppedFile = f"{fileName}-cropped.png"
+                if os.path.exists(croppedFile):
+                    futures.append(executor.submit(LoadedDataset.loadImageFile, croppedFile))
+                else:
+                    futures.append(executor.submit(LoadedDataset.loadAndConvertImageFile, fileName))
 
-                futures.append(executor.submit(LoadedDataset.loadAndConvertImageFile, fileName))
-
-            images = [future.result() for future in concurrent.futures.as_completed(futures) if future.result() is not None]
-
-        random.shuffle(images)
+            images.extend([future.result() for future in concurrent.futures.as_completed(futures) if future.result() is not None])
 
         LoadedDataset.rawImages = images
+
+    @staticmethod
+    def loadImageFile(fileName):
+        image = skimage.io.imread(fileName)
+        return image
 
     @staticmethod
     def loadAndConvertImageFile(fileName):
@@ -88,9 +94,12 @@ class LoadedDataset(Dataset):
         cropped = image[cropTop:cropBottom, cropLeft:cropRight]
         cropped = skimage.transform.resize(cropped, output_shape=(256, 256))
 
+        croppedFile = f"{fileName}-cropped.png"
+        skimage.io.imsave(croppedFile, cropped)
+
         return cropped
 
-    def _getRawPillImages(self, count, imageId, applyAugmentations=True):
+    def _getRawPillImages(self, count, imageId, applyAugmentationsAfter=0):
         mainAugmentation = iaa.Sequential([
             iaa.Affine(
                 scale=(self.params["loadAugmentation"]["minScale"], self.params["loadAugmentation"]["maxScale"]),
@@ -115,7 +124,7 @@ class LoadedDataset(Dataset):
             anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["loadAugmentation"]["minRotation"] / 2,
                                                                                     self.params["loadAugmentation"]["maxRotation"] / 2) * rotationDirection,
                                                        mode='constant', cval=1)
-            if applyAugmentations:
+            if n >= applyAugmentationsAfter:
                 anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]
                 anchorAugmented = anchorAugmented / 255.0
                 anchorAugmented = numpy.maximum(0, anchorAugmented)

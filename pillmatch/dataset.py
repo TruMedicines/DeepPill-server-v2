@@ -9,9 +9,11 @@ import sklearn
 import os
 import sklearn.preprocessing
 import skimage.color
+import scipy.signal
 import skimage.io
 from pillmatch import textures
 import cv2
+import gc
 from skimage.filters import threshold_otsu, threshold_local
 
 
@@ -50,6 +52,7 @@ class Dataset:
         images = self._getRawPillImages(self.params['neuralNetwork']['augmentationsPerImage'], imageId)
         for n, image in enumerate(images):
             anchor = image
+            anchor = skimage.transform.resize(anchor, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
 
             if self.params['preprocessing']['threshold']['enabled'] == 'false':
                 # Apply custom hue transform
@@ -72,11 +75,12 @@ class Dataset:
 
                 anchorAugmented = noiseAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0] / 255.0
 
-            anchorAugmented = skimage.transform.resize(anchorAugmented, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
-
             augmentations.append(anchorAugmented)
 
         result = numpy.array(augmentations, copy=True)
+
+        if imageId % 10 == 0:
+            gc.collect()
 
         return result
 
@@ -96,19 +100,26 @@ class Dataset:
 
         testRotated = {rotation: self._applyPreprocessing(skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1)) for rotation in testRotations}
 
-        return image, testRotated
+        return self._applyPreprocessing(image), testRotated
 
     def getFinalTestingImageSet(self, imageId):
         self.setRotationParams(0, 360)
         self.params["generateAugmentation"]["minRotation"] = 0
         self.params["generateAugmentation"]["maxRotation"] = 360
-        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId)
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"] + self.params['finalTestAugmentationsPerImage'], imageId, applyAugmentationsAfter=self.params["finalTestDBAugmentations"])
 
         dbImages = []
         for dbImage in rawImages[:self.params["finalTestDBAugmentations"]]:
             dbImage = skimage.transform.resize(dbImage, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
+            # for shrinkage in [32, 64, 96]:
+            #     newSize = (int(self.params['imageWidth']-shrinkage), int(self.params['imageHeight']-shrinkage), 3)
+            #     shrunk = skimage.transform.resize(dbImage, newSize, mode='reflect', anti_aliasing=True)
+            #     width_pad = int(shrinkage/2)
+            #     height_pad = int(shrinkage/2)
+            #     padded = skimage.util.pad(shrunk, ((width_pad, width_pad), (height_pad, height_pad), (0, 0)), mode="constant", constant_values=1)
+
             for rotation in range(0, 360, self.params['finalTestRotationIncrement']):
-                dbImages.append(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1))
+                dbImages.append(self._applyPreprocessing(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1)))
 
         testImages = []
         for image in rawImages[self.params["finalTestDBAugmentations"]:]:
@@ -118,7 +129,7 @@ class Dataset:
             testRotations = []
             for rotation in range(0, 360, self.params['finalTestQueryRotationIncrement']):
                 rotated = skimage.transform.rotate(image, angle=rotation, mode='constant', cval=1)
-                testRotations.append(rotated)
+                testRotations.append(self._applyPreprocessing(rotated))
             testImages.append(testRotations)
 
         data = (imageId, dbImages, testImages)
@@ -128,49 +139,58 @@ class Dataset:
         self.setRotationParams(0, 360)
         self.params["generateAugmentation"]["minRotation"] = 0
         self.params["generateAugmentation"]["maxRotation"] = 360
-        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"], imageId, applyAugmentations=True)
+        rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"], imageId, applyAugmentationsAfter=self.params["finalTestDBAugmentations"])
 
         dbImages = []
         for dbImage in rawImages:
             dbImage = skimage.transform.resize(dbImage, (self.params['imageWidth'], self.params['imageHeight'], 3), mode='reflect', anti_aliasing=True)
             for rotation in range(0, 360, self.params['finalTestRotationIncrement']):
-                dbImages.append(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1))
+                dbImages.append(self._applyPreprocessing(skimage.transform.rotate(dbImage, angle=rotation, mode='constant', cval=1)))
 
         return dbImages
 
 
-    def _getRawPillImages(self, count, imageId, applyAugmentations=True):
+    def _getRawPillImages(self, count, imageId, applyAugmentationsAfter=0):
         """ This method is meant to be implemented by subclasses. It should return multiple available
             raw pill images, as it would appear if a user took it from their camera.
         """
         pass
 
 
+    def extractCircle(self, image):
+        grey = cv2.cvtColor(numpy.array(image * 255.0, dtype=numpy.uint8), cv2.COLOR_BGR2GRAY)
+        circles = cv2.HoughCircles(grey, cv2.HOUGH_GRADIENT, 1, 500, param1=4, param2=1, minRadius=60, maxRadius=112)
+
+        if circles is None:
+            return image
+
+        cropCircle = circles[0][0]
+
+        mask = numpy.zeros((image.shape[0], image.shape[1], 3), dtype=numpy.uint8)
+        rr, cc = skimage.draw.circle(cropCircle[1], cropCircle[0], cropCircle[2],
+                                     shape=(image.shape[0], image.shape[1]))
+        mask[rr, cc, :] = 1
+        image = image * mask
+
+        cropTop = max(0, int(cropCircle[1] - cropCircle[2]))
+        cropBottom = min(int(cropCircle[1] + cropCircle[2]), image.shape[1])
+        cropLeft = max(0, int(cropCircle[0] - cropCircle[2]))
+        cropRight = min(int(cropCircle[0] + cropCircle[2]), image.shape[0])
+
+        cropped = image[cropTop:cropBottom, cropLeft:cropRight]
+
+        image = skimage.transform.resize(cropped, (image.shape[0], image.shape[1], 3), mode='reflect',
+                                         anti_aliasing=True)
+
+        del cropped, mask
+
+        return image
     def _applyPreprocessing(self, image):
         """ This method should apply preprocessing to the given image. This includes convert-to-grayscale,
             edge detection, and hough-circles to try and crop out the circle.
         """
         if self.params['preprocessing']['detectCircle'] == 'true':
-            grey = cv2.cvtColor(numpy.array(image * 255.0, dtype=numpy.uint8), cv2.COLOR_BGR2GRAY)
-            circles = cv2.HoughCircles(grey, cv2.HOUGH_GRADIENT, 1, 500, param1=4, param2=1, minRadius=60, maxRadius=112)
-
-            cropCircle = circles[0][0]
-
-            mask = numpy.zeros((image.shape[0], image.shape[1], 3), dtype=numpy.uint8)
-            rr, cc = skimage.draw.circle(cropCircle[1], cropCircle[0], cropCircle[2], shape=(image.shape[0], image.shape[1]))
-            mask[rr, cc, :] = 1
-            image = image * mask
-
-            cropTop = max(0, int(cropCircle[1] - cropCircle[2]))
-            cropBottom = min(int(cropCircle[1] + cropCircle[2]), image.shape[1])
-            cropLeft = max(0, int(cropCircle[0] - cropCircle[2]))
-            cropRight = min(int(cropCircle[0] + cropCircle[2]), image.shape[0])
-
-            cropped = image[cropTop:cropBottom, cropLeft:cropRight]
-
-            image = skimage.transform.resize(cropped, (image.shape[0], image.shape[1], 3), mode='reflect', anti_aliasing=True)
-
-            del cropped, mask
+            image = self.extractCircle(image)
 
         if self.params['preprocessing']['edgeDetection']['enabled'] == 'true':
             grey = cv2.cvtColor(numpy.array(image * 255.0, dtype=numpy.uint8), cv2.COLOR_BGR2GRAY)
@@ -182,6 +202,8 @@ class Dataset:
             grey = skimage.color.rgb2gray(image)
             thresh = threshold_local(grey, block_size=31, offset=0.05)
             binary = grey <= thresh
+
+            binary = scipy.signal.medfilt(binary, kernel_size=(3, 3))
 
             image[:, :, 0] = binary
             image[:, :, 1] = binary

@@ -136,7 +136,7 @@ class PillRecognitionModel:
                     gc.collect()
                     currentImageExecutor = self.imageGenerationExecutor
                     self.imageGenerationExecutor = concurrent.futures.ProcessPoolExecutor(max_workers=self.parameters['imageGenerationWorkers'])
-                    currentImageExecutor.shutdown(wait=False)
+                    currentImageExecutor.shutdown(wait=True)
 
                 if imageId % 2 == 0:
                     self.generatedDataset.setRotationParams(self.currentMinRotation, self.currentMaxRotation)
@@ -392,7 +392,7 @@ class PillRecognitionModel:
             trend995 = '+' if rollingAverage99 > rollingAverage995 else '-'
             trend = trend95 + trend99 + trend995
 
-            if batch % 50 == 0:
+            if batch % 10 == 0:
                 gc.collect()
 
             if self.trackMemory:
@@ -693,7 +693,12 @@ class PillRecognitionModel:
                 #     for imageIndex, image in enumerate(augmentation):
                 #         skimage.io.imsave(f"data/images/{imageId}/test-{augmentationIndex}-{imageIndex}.png", image)
 
+                # vectors = model.predict(numpy.array(dbImages))
+                #
+                # dbVectors[imageId] = sklearn.preprocessing.normalize([numpy.mean(vectors, axis=0)])
+
                 dbVectors[imageId] = sklearn.preprocessing.normalize(model.predict(numpy.array(dbImages)))
+                # dbVectors[imageId] = model.predict(numpy.array(dbImages))
 
                 for vectorIndex, vector in enumerate(dbVectors[imageId]):
                     metadataCSVWriter.writerow({
@@ -706,6 +711,9 @@ class PillRecognitionModel:
                 testVectors[imageId] = []
                 for augmentationIndex, augmentation in enumerate(testImages):
                     vectors = sklearn.preprocessing.normalize(model.predict(numpy.array(augmentation)))
+                    # vectors = model.predict(numpy.array(augmentation))
+                    # vectors = model.predict(numpy.array(augmentation))
+                    # vectors = sklearn.preprocessing.normalize([numpy.mean(vectors, axis=0)])
                     testVectors[imageId].append(vectors)
 
                     for vectorIndex, vector in enumerate(vectors):

@@ -29,16 +29,16 @@
                    "denseLayerMultiplier": 4,
                    "dropoutRate": 0.45,
                    "optimizer": {"$index": 3,
-                                 "learningRate": 1e-3,
-                                 "learningRateDecay": 0.95,
-                                 "pretrainLearningRate": 1e-3,
-                                 "optimizerName": "adam"},
+                                 "learningRate": 0.00011,
+                                 "learningRateDecay": 0.97,
+                                 "pretrainLearningRate": 0.00011,
+                                 "optimizerName": "nadam"},
                    "vectorSize": 1024,
                    "denseActivation": "softsign",
                    "finalActivation": "sigmoid",
                    "epochs": 20,
-                   "lossMode": "all",
-                   "lossMargin": 0.3
+                   "lossMode": "hard",
+                   "lossMargin": 0.4
    },
   "startingWeights": {
     "pretrainPercent": 0,
@@ -81,12 +81,12 @@
     "maxBrightness": 40
   },
   "preprocessing": {
-    "detectCircle": "true",
-    "edgeDetection": {"enabled": "false", "threshold": 200},
-    "threshold": {"enabled": "false"}
+    "detectCircle": "false",
+    "edgeDetection": {"enabled": "false", "threshold": 50},
+    "threshold": {"enabled": "true"}
   },
   "trainingAugmentation": {
-    "gaussianNoise": 0.15,
+    "gaussianNoise": 0.20,
     "minRotation": 0,
     "maxRotation": 360,
     "piecewiseAffine": 0.006345186964944,
@@ -101,9 +101,9 @@
   },
   "finalTestPrintEvery": 25,
   "finalTestImages": 100,
-  "finalTestRotationIncrement": 30,
-  "finalTestDBAugmentations": 5,
-  "finalTestAugmentationsPerImage": 8,
+  "finalTestRotationIncrement": 10,
+  "finalTestDBAugmentations": 1,
+  "finalTestAugmentationsPerImage": 2,
   "finalTestQueryRotationIncrement": 15,
   "azureStorageBucket": "pillimages",
   "azureStorageKey": "j8/WRyKg4STU5h3RddQcq2QSjE1DiJDu18azIFt91ztOy50XKmLNo6th3Ee/3TsVAMQfe17nx+nSvDoH5Qr7Iw==",

@@ -1,22 +1,3 @@
 {
-  "trainingAugmentation": {
-    "gaussianNoise": 0.20
-  },
-  "neuralNetwork": {
-    "optimizer": {
-      "optimizerName": "nadam",
-      "learningRate": 0.00011,
-      "learningRateDecay": 0.97
-    },
-   "lossMode": "hard",
-   "lossMargin": 0.40
-  },
-  "preprocessing": {
-    "detectCircle": "false",
-    "edgeDetection": {"enabled": "false", "threshold": 50}
-  },
-  "startingWeights": {
-    "pretrainPercent": 0,
-    "weights": "imagenet"
-  }
+  
 }
