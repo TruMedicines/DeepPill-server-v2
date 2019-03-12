@@ -137,8 +137,6 @@ class Dataset:
 
     def getImageDBSet(self, imageId):
         self.setRotationParams(0, 360)
-        self.params["generateAugmentation"]["minRotation"] = 0
-        self.params["generateAugmentation"]["maxRotation"] = 360
         rawImages = self._getRawPillImages(self.params["finalTestDBAugmentations"], imageId, applyAugmentationsAfter=self.params["finalTestDBAugmentations"])
 
         dbImages = []

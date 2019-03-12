@@ -37,7 +37,7 @@ class LoadedDataset(Dataset):
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             futures = []
             files = [file for file in os.listdir('test-images') if not file.endswith("-cropped.png")]
-            # random.shuffle(files)
+            random.shuffle(files)
             # files = sorted(files)
             for file in files:
                 fileName = f"test-images/{file}"
@@ -121,8 +121,7 @@ class LoadedDataset(Dataset):
         augmentations = []
         for n in range(count):
             rotationDirection = random.choice([-1, +1])
-            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["loadAugmentation"]["minRotation"] / 2,
-                                                                                    self.params["loadAugmentation"]["maxRotation"] / 2) * rotationDirection,
+            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.currentMinRotation / 2, self.currentMaxRotation / 2) * rotationDirection,
                                                        mode='constant', cval=1)
             if n >= applyAugmentationsAfter:
                 anchorAugmented = mainAugmentation.augment_images(numpy.array([anchorAugmented]) * 255.0)[0]

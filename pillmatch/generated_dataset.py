@@ -49,7 +49,7 @@ class GeneratedDataset(Dataset):
         augmentations = []
         for n in range(count):
             rotationDirection = random.choice([-1, +1])
-            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.params["generateAugmentation"]["minRotation"] / 2, self.params["generateAugmentation"]["maxRotation"] / 2) * rotationDirection,
+            anchorAugmented = skimage.transform.rotate(anchor, angle=random.uniform(self.currentMinRotation / 2, self.currentMaxRotation / 2) * rotationDirection,
                                                        mode='constant', cval=1)
             if n >= applyAugmentationsAfter:
                 anchorAugmented = numpy.maximum(0, anchorAugmented)

@@ -53,8 +53,6 @@
     "maxGaussianBlur": 1,
     "minMotionBlur": 3,
     "maxMotionBlur": 8,
-    "minRotation": 0,
-    "maxRotation": 1,
     "minShear": -6,
     "maxShear": 6,
     "minContrast": 0.95,
@@ -71,8 +69,6 @@
     "maxGaussianBlur": 1,
     "minMotionBlur": 3,
     "maxMotionBlur": 8,
-    "minRotation": 0,
-    "maxRotation": 1,
     "minShear": -6,
     "maxShear": 6,
     "minContrast": 0.95,
@@ -83,7 +79,7 @@
   "preprocessing": {
     "detectCircle": "false",
     "edgeDetection": {"enabled": "false", "threshold": 50},
-    "threshold": {"enabled": "true"}
+    "threshold": {"enabled": "false"}
   },
   "trainingAugmentation": {
     "gaussianNoise": 0.20,
